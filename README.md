@@ -10,11 +10,10 @@ compatible products.
 
 ## Demo
 
-[![Agent Transmission demo with a physical gear shifter controlling Codex model and effort](docs/assets/agent-transmission-demo.webp)](docs/assets/agent-transmission-demo.mp4)
+https://github.com/user-attachments/assets/9548d44b-e48f-4e01-b5ed-2294c923b9d5
 
-[Watch the synchronized demo](docs/assets/agent-transmission-demo.mp4). The left side is stabilized
-phone footage of the physical shifter and live laptop display; the right side is the matching screen
-capture.
+The left side is stabilized phone footage of the physical shifter and live laptop display; the
+right side is the matching screen capture. [Download the MP4](docs/assets/agent-transmission-demo.mp4).
 
 ## Requirements
 
