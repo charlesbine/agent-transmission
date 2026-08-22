@@ -22,6 +22,7 @@ final class CodexDesktopIPCClient {
     typealias JSON = [String: Any]
     typealias Completion = (Result<JSON, Error>) -> Void
 
+    var onConnected: (() -> Void)?
     var onDisconnected: ((String) -> Void)?
     var onFocusedThreadChanged: ((String?) -> Void)?
 
@@ -31,46 +32,62 @@ final class CodexDesktopIPCClient {
     private var clientID: String?
     private var focusedThreadID: String?
     private var pending: [String: Completion] = [:]
+    private var reconnectBackoff = ReconnectBackoff()
+    private var reconnectWorkItem: DispatchWorkItem?
+    private var shouldReconnect = false
 
     private var socketPath: String {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex/ipc/ipc.sock").path
     }
 
-    func connect(completion: @escaping (Result<Void, Error>) -> Void) {
+    func reconnect() {
         queue.async {
-            self.closeLocked(notify: false)
-
-            let connection = NWConnection(to: .unix(path: self.socketPath), using: .tcp)
-            self.connection = connection
-            connection.stateUpdateHandler = { [weak self, weak connection] state in
-                guard let self, self.connection === connection else { return }
-                switch state {
-                case .ready:
-                    self.receiveNext()
-                    self.sendRequestLocked(method: "initialize", params: [
-                        "clientType": "codex-transmission",
-                    ], version: 0, requiresInitialization: false) { result in
-                        let initialized: Result<Void, Error> = result.flatMap { response in
-                            guard let result = response["result"] as? JSON,
-                                  let clientID = result["clientId"] as? String else {
-                                return .failure(CodexDesktopIPCError.invalidResponse)
-                            }
-                            self.clientID = clientID
-                            return .success(())
-                        }
-                        DispatchQueue.main.async { completion(initialized) }
-                    }
-                case let .failed(error):
-                    self.connectionFailed(error)
-                case .cancelled:
-                    self.closeLocked(notify: false)
-                default:
-                    break
-                }
-            }
-            connection.start(queue: self.queue)
+            self.shouldReconnect = true
+            self.reconnectBackoff.reset()
+            self.reconnectWorkItem?.cancel()
+            self.reconnectWorkItem = nil
+            self.connectLocked()
         }
+    }
+
+    private func connectLocked() {
+        closeConnectionLocked()
+
+        let connection = NWConnection(to: .unix(path: socketPath), using: .tcp)
+        self.connection = connection
+        connection.stateUpdateHandler = { [weak self, weak connection] state in
+            guard let self, self.connection === connection else { return }
+            switch state {
+            case .ready:
+                self.receiveNext(from: connection)
+                self.sendRequestLocked(method: "initialize", params: [
+                    "clientType": "codex-transmission",
+                ], version: 0, requiresInitialization: false) { [weak self, weak connection] result in
+                    guard let self, self.connection === connection else { return }
+                    switch result {
+                    case let .success(response):
+                        guard let responseResult = response["result"] as? JSON,
+                              let clientID = responseResult["clientId"] as? String else {
+                            self.connectionFailed(CodexDesktopIPCError.invalidResponse)
+                            return
+                        }
+                        self.clientID = clientID
+                        self.reconnectBackoff.reset()
+                        DispatchQueue.main.async { [weak self] in self?.onConnected?() }
+                    case let .failure(error):
+                        self.connectionFailed(error)
+                    }
+                }
+            case let .failed(error):
+                self.connectionFailed(error)
+            case .cancelled:
+                break
+            default:
+                break
+            }
+        }
+        connection.start(queue: queue)
     }
 
     func updateSettings(
@@ -102,7 +119,12 @@ final class CodexDesktopIPCClient {
     }
 
     func close() {
-        queue.async { self.closeLocked(notify: false) }
+        queue.async {
+            self.shouldReconnect = false
+            self.reconnectWorkItem?.cancel()
+            self.reconnectWorkItem = nil
+            self.closeConnectionLocked()
+        }
     }
 
     private func sendRequestLocked(
@@ -150,9 +172,10 @@ final class CodexDesktopIPCClient {
         }
     }
 
-    private func receiveNext() {
-        connection?.receive(minimumIncompleteLength: 1, maximumLength: 1_048_576) { [weak self] data, _, isComplete, error in
-            guard let self else { return }
+    private func receiveNext(from connection: NWConnection?) {
+        guard let connection else { return }
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 1_048_576) { [weak self, weak connection] data, _, isComplete, error in
+            guard let self, self.connection === connection else { return }
             if let data, !data.isEmpty {
                 self.buffer.append(data)
                 self.consumeFrames()
@@ -162,7 +185,7 @@ final class CodexDesktopIPCClient {
             } else if isComplete {
                 self.connectionFailed(CodexDesktopIPCError.notConnected)
             } else {
-                self.receiveNext()
+                self.receiveNext(from: connection)
             }
         }
     }
@@ -222,11 +245,25 @@ final class CodexDesktopIPCClient {
 
     private func connectionFailed(_ error: Error) {
         let detail = error.localizedDescription
-        closeLocked(notify: false)
+        closeConnectionLocked()
         DispatchQueue.main.async { [weak self] in self?.onDisconnected?(detail) }
+        scheduleReconnectLocked()
     }
 
-    private func closeLocked(notify: Bool) {
+    private func scheduleReconnectLocked() {
+        guard shouldReconnect, reconnectWorkItem == nil else { return }
+        let delay = reconnectBackoff.nextDelay()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.reconnectWorkItem = nil
+            guard self.shouldReconnect else { return }
+            self.connectLocked()
+        }
+        reconnectWorkItem = workItem
+        queue.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func closeConnectionLocked() {
         connection?.stateUpdateHandler = nil
         connection?.cancel()
         connection = nil
@@ -236,10 +273,19 @@ final class CodexDesktopIPCClient {
         let callbacks = pending.values
         pending.removeAll()
         callbacks.forEach { $0(.failure(CodexDesktopIPCError.notConnected)) }
-        if notify {
-            DispatchQueue.main.async { [weak self] in
-                self?.onDisconnected?(CodexDesktopIPCError.notConnected.localizedDescription)
-            }
-        }
+    }
+}
+
+struct ReconnectBackoff {
+    private static let maximumDelay: TimeInterval = 30
+    private var delay: TimeInterval = 1
+
+    mutating func nextDelay() -> TimeInterval {
+        defer { delay = min(delay * 2, Self.maximumDelay) }
+        return delay
+    }
+
+    mutating func reset() {
+        delay = 1
     }
 }

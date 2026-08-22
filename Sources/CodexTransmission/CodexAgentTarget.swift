@@ -51,6 +51,11 @@ final class CodexAgentTarget: AgentTarget {
             self.onFocusedTaskChanged?(nil)
             self.publishState(message: message)
         }
+        control.onConnected = { [weak self] in
+            guard let self else { return }
+            self.controlConnected = true
+            self.publishState()
+        }
         control.onFocusedThreadChanged = { [weak self] taskID in
             self?.onFocusedTaskChanged?(taskID)
         }
@@ -79,17 +84,7 @@ final class CodexAgentTarget: AgentTarget {
                 self.publishState(message: error.localizedDescription)
             }
         }
-        control.connect { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case .success:
-                self.controlConnected = true
-                self.publishState()
-            case let .failure(error):
-                self.controlConnected = false
-                self.publishState(message: error.localizedDescription)
-            }
-        }
+        control.reconnect()
     }
 
     func refreshTasks() {

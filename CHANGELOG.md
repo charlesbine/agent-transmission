@@ -3,6 +3,10 @@
 Agent Transmission is the provider-agnostic project; Codex Transmission is its first shipped app
 and adapter pairing.
 
+## Unreleased
+
+- Reconnect Codex Desktop control automatically after Codex restarts or its local IPC socket drops.
+
 ## 0.1.0 — 2026-08-21
 
 - Added direct HID support for the NiTHO GS-SH Gearshifter on macOS.

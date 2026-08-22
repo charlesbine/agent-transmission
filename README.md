@@ -74,8 +74,9 @@ way to change the settings of an already-open Desktop-owned task.
 
 That Desktop bridge is experimental. A future Codex Desktop release may change it. Codex
 Transmission fails closed with a visible menu-bar error and never falls back to UI automation or a
-sibling app-server. Settings affect subsequent turns only; an answer already in progress is not
-changed.
+sibling app-server. If Codex restarts, Transmission reconnects automatically with bounded backoff;
+the menu's **Reconnect** action retries immediately. Settings affect subsequent turns only; an
+answer already in progress is not changed.
 
 ## Adapter architecture
 
