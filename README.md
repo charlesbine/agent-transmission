@@ -8,6 +8,14 @@ Agent Transmission is an independent open-source project. It is not affiliated w
 OpenAI or NiTHO. Codex is a product of OpenAI; NiTHO and GS-SH Gearshifter are used only to identify
 compatible products.
 
+## Demo
+
+[![Agent Transmission demo with a physical gear shifter controlling Codex model and effort](docs/assets/agent-transmission-demo.webp)](docs/assets/agent-transmission-demo.mp4)
+
+[Watch the synchronized demo](docs/assets/agent-transmission-demo.mp4). The left side is stabilized
+phone footage of the physical shifter and live laptop display; the right side is the matching screen
+capture.
+
 ## Requirements
 
 - macOS 13 or later on Apple silicon
