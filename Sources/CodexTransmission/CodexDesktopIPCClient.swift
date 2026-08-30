@@ -118,6 +118,17 @@ final class CodexDesktopIPCClient {
         }
     }
 
+    func requestFocusedThreadStatus(anchorThreadID: String) {
+        queue.async {
+            guard let clientID = self.clientID else { return }
+            let message = Self.followingStatusRequest(
+                clientID: clientID,
+                anchorThreadID: anchorThreadID
+            )
+            self.sendBroadcastLocked(message)
+        }
+    }
+
     func close() {
         queue.async {
             self.shouldReconnect = false
@@ -221,6 +232,38 @@ final class CodexDesktopIPCClient {
                 completion(.success(message))
             }
         }
+    }
+
+    private func sendBroadcastLocked(_ message: JSON) {
+        guard let connection else { return }
+        do {
+            let payload = try JSONSerialization.data(withJSONObject: message)
+            var length = UInt32(payload.count).littleEndian
+            var frame = withUnsafeBytes(of: &length) { Data($0) }
+            frame.append(payload)
+            connection.send(content: frame, completion: .contentProcessed { [weak self, weak connection] error in
+                guard let self, let error else { return }
+                self.queue.async {
+                    guard self.connection === connection else { return }
+                    self.connectionFailed(error)
+                }
+            })
+        } catch {
+            connectionFailed(error)
+        }
+    }
+
+    static func followingStatusRequest(clientID: String, anchorThreadID: String) -> JSON {
+        [
+            "type": "broadcast",
+            "sourceClientId": clientID,
+            "version": 1,
+            "method": "thread-stream-following-status-requested",
+            "params": [
+                "conversationId": anchorThreadID,
+                "hostId": "local",
+            ],
+        ]
     }
 
     private func consumeBroadcast(_ message: JSON) {

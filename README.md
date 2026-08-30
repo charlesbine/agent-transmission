@@ -30,6 +30,9 @@ telemetry and does not send prompts or task contents anywhere.
 Download the release ZIP, move **Codex Transmission.app** to Applications, open it, and plug in the
 shifter. The app has no Dock icon; its current gear and preset appear in the menu bar.
 
+To start it automatically after signing in, open the menu-bar item and enable **Launch at Login**.
+If macOS requires approval, the item opens **System Settings → General → Login Items**.
+
 Release `0.1.0` is ad-hoc signed when built without an Apple Developer ID. macOS may require you to
 right-click the app and choose **Open** the first time. A Developer-ID-signed and notarized release
 can be built with the workflow below.
@@ -74,9 +77,9 @@ way to change the settings of an already-open Desktop-owned task.
 
 That Desktop bridge is experimental. A future Codex Desktop release may change it. Codex
 Transmission fails closed with a visible menu-bar error and never falls back to UI automation or a
-sibling app-server. If Codex restarts, Transmission reconnects automatically with bounded backoff;
-the menu's **Reconnect** action retries immediately. Settings affect subsequent turns only; an
-answer already in progress is not changed.
+sibling app-server. If Codex restarts, Transmission reconnects automatically with bounded backoff
+and re-synchronizes the currently focused task; the menu's **Reconnect** action retries immediately.
+Settings affect subsequent turns only; an answer already in progress is not changed.
 
 ## Adapter architecture
 

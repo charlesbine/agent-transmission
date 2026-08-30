@@ -15,6 +15,7 @@ final class CodexAgentTarget: AgentTarget {
     private let control = CodexDesktopIPCClient()
     private var discoveryConnected = false
     private var controlConnected = false
+    private var focusSynchronizer = FocusStatusSynchronizer()
 
     private static let families: [(name: String, model: String, efforts: [ReasoningEffort])] = [
         ("Luna", "gpt-5.6-luna", [.low, .medium, .high, .xhigh, .max]),
@@ -48,12 +49,16 @@ final class CodexAgentTarget: AgentTarget {
         control.onDisconnected = { [weak self] message in
             guard let self else { return }
             self.controlConnected = false
+            self.focusSynchronizer.controlDidDisconnect()
             self.onFocusedTaskChanged?(nil)
             self.publishState(message: message)
         }
         control.onConnected = { [weak self] in
             guard let self else { return }
             self.controlConnected = true
+            if let anchorThreadID = self.focusSynchronizer.controlDidConnect() {
+                self.control.requestFocusedThreadStatus(anchorThreadID: anchorThreadID)
+            }
             self.publishState()
         }
         control.onFocusedThreadChanged = { [weak self] taskID in
@@ -70,6 +75,8 @@ final class CodexAgentTarget: AgentTarget {
     func reconnect() {
         discoveryConnected = false
         controlConnected = false
+        focusSynchronizer.controlDidDisconnect()
+        onFocusedTaskChanged?(nil)
         publishState(message: "Connecting to Codex…")
 
         catalog.connect { [weak self] result in
@@ -92,7 +99,12 @@ final class CodexAgentTarget: AgentTarget {
         catalog.listTasks { [weak self] result in
             switch result {
             case let .success(tasks):
-                self?.onTasksChanged?(tasks)
+                guard let self else { return }
+                let anchorThreadID = self.focusSynchronizer.tasksDidChange(tasks)
+                self.onTasksChanged?(tasks)
+                if let anchorThreadID {
+                    self.control.requestFocusedThreadStatus(anchorThreadID: anchorThreadID)
+                }
             case let .failure(error):
                 self?.publishState(message: error.localizedDescription)
             }
@@ -141,5 +153,32 @@ final class CodexAgentTarget: AgentTarget {
             controlConnected: controlConnected,
             message: message
         ))
+    }
+}
+
+struct FocusStatusSynchronizer {
+    private var anchorThreadID: String?
+    private var controlConnected = false
+    private var needsSynchronization = true
+
+    mutating func controlDidConnect() -> String? {
+        controlConnected = true
+        return takeSynchronizationAnchor()
+    }
+
+    mutating func controlDidDisconnect() {
+        controlConnected = false
+        needsSynchronization = true
+    }
+
+    mutating func tasksDidChange(_ tasks: [AgentTask]) -> String? {
+        anchorThreadID = tasks.first?.id
+        return takeSynchronizationAnchor()
+    }
+
+    private mutating func takeSynchronizationAnchor() -> String? {
+        guard controlConnected, needsSynchronization, let anchorThreadID else { return nil }
+        needsSynchronization = false
+        return anchorThreadID
     }
 }

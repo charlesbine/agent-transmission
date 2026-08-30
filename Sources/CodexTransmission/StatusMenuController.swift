@@ -13,6 +13,7 @@ private final class PresetMenuChoice: NSObject {
 
 final class StatusMenuController: NSObject, NSMenuDelegate {
     private let model: AppModel
+    private let launchAtLogin = LaunchAtLoginController()
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
 
@@ -123,6 +124,22 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.addItem(restore)
 
         menu.addItem(.separator())
+        let launchAtLoginItem = NSMenuItem(
+            title: launchAtLoginTitle,
+            action: #selector(toggleLaunchAtLogin),
+            keyEquivalent: ""
+        )
+        launchAtLoginItem.target = self
+        switch launchAtLogin.state {
+        case .enabled:
+            launchAtLoginItem.state = .on
+        case .requiresApproval:
+            launchAtLoginItem.state = .mixed
+        case .disabled:
+            launchAtLoginItem.state = .off
+        }
+        menu.addItem(launchAtLoginItem)
+
         let reconnect = NSMenuItem(title: "Reconnect", action: #selector(reconnect), keyEquivalent: "r")
         reconnect.target = self
         menu.addItem(reconnect)
@@ -135,6 +152,15 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         guard let task = model.targetTask else { return "Target · none" }
         let mode = model.targetSelection == .automatic ? "Auto" : "Pinned"
         return "Target · \(mode) · \(task.title)"
+    }
+
+    private var launchAtLoginTitle: String {
+        switch launchAtLogin.state {
+        case .requiresApproval:
+            return "Launch at Login · Approval Required"
+        case .disabled, .enabled:
+            return "Launch at Login"
+        }
     }
 
     private func targetMenu() -> NSMenu {
@@ -180,6 +206,18 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     @objc private func toggleParkingBrake() { model.toggleParkingBrake() }
     @objc private func toggleFastMode() { model.toggleFastMode() }
+    @objc private func toggleLaunchAtLogin() {
+        do {
+            try launchAtLogin.toggle()
+        } catch {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Couldn’t update Launch at Login"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
+        rebuildMenu()
+    }
     @objc private func selectAutomatic() { model.selectAutomaticTarget() }
     @objc private func openTarget() { model.openTarget() }
     @objc private func reconnect() { model.reconnect() }
