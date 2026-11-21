@@ -54,11 +54,13 @@ public struct ModelPreset: Equatable, Codable, Sendable {
     public let name: String
     public let model: String
     public let effort: ReasoningEffort
+    public let provider: String?
 
-    public init(name: String, model: String, effort: ReasoningEffort) {
+    public init(name: String, model: String, effort: ReasoningEffort, provider: String? = nil) {
         self.name = name
         self.model = model
         self.effort = effort
+        self.provider = provider
     }
 
     public var displayLabel: String { "\(name) · \(effort.shortLabel)" }
@@ -79,7 +81,9 @@ public struct TransmissionMap: Equatable, Codable, Sendable {
     public func isCompatible(with presets: [ModelPreset]) -> Bool {
         isValid && (forward + [reverse]).allSatisfy { selected in
             presets.contains { supported in
-                selected.model == supported.model && selected.effort == supported.effort
+                selected.model == supported.model
+                    && selected.effort == supported.effort
+                    && selected.provider == supported.provider
             }
         }
     }

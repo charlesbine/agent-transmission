@@ -2,6 +2,35 @@ import AppKit
 import Foundation
 import AgentTransmissionCore
 
+enum AgentTargetKind: String, CaseIterable, Equatable, Sendable {
+    case t3Code = "t3-code"
+    case codexDesktop = "codex-desktop"
+
+    static let userDefaultsKey = "agentTargetKind.v1"
+
+    var displayName: String {
+        switch self {
+        case .t3Code: "T3 Code"
+        case .codexDesktop: "Codex Desktop"
+        }
+    }
+
+    static func defaultKind(t3RuntimeExists: Bool) -> AgentTargetKind {
+        t3RuntimeExists ? .t3Code : .codexDesktop
+    }
+
+    static func resolveInitial(
+        defaults: UserDefaults = .standard,
+        t3RuntimeExists: Bool = T3CodeClient.runtimeStateExists()
+    ) -> AgentTargetKind {
+        if let raw = defaults.string(forKey: userDefaultsKey),
+           let saved = AgentTargetKind(rawValue: raw) {
+            return saved
+        }
+        return defaultKind(t3RuntimeExists: t3RuntimeExists)
+    }
+}
+
 final class AppModel {
     private static let transmissionMapKey = "transmissionMap.v1"
     private static let fastModeKey = "fastMode.v1"
@@ -21,7 +50,11 @@ final class AppModel {
     private(set) var currentPreset: ModelPreset?
     private(set) var status = "Starting…"
     private(set) var map: TransmissionMap
+    private(set) var selectedTargetKind: AgentTargetKind?
 
+    var availableTargetKinds: [AgentTargetKind] {
+        targetFactory != nil ? AgentTargetKind.allCases : []
+    }
     var controlSurfaceName: String { controlSurface.name }
     var agentTargetName: String { agentTarget.name }
     var agentTargetControlIsExperimental: Bool { agentTarget.controlIsExperimental }
@@ -29,9 +62,12 @@ final class AppModel {
     var isUsingDefaultMap: Bool { map == agentTarget.defaultTransmissionMap }
 
     var targetSelection: TargetSelection {
-        if let pinnedID = defaults.string(forKey: "pinnedTaskID")
-            ?? defaults.string(forKey: "pinnedThreadID") {
+        if let pinnedID = defaults.string(forKey: currentPinnedTaskKey) {
             return .pinned(pinnedID)
+        }
+        if selectedTargetKind != .t3Code,
+           let legacyPinnedID = defaults.string(forKey: "pinnedThreadID") {
+            return .pinned(legacyPinnedID)
         }
         return .automatic
     }
@@ -48,10 +84,26 @@ final class AppModel {
 
     private let defaults: UserDefaults
     private let controlSurface: any ControlSurface
-    private let agentTarget: any AgentTarget
+    private var agentTarget: any AgentTarget
+    private let targetFactory: ((AgentTargetKind) -> any AgentTarget)?
+    private var isStarted = false
     private var refreshTimer: Timer?
     private var modifierGestureConsumed = false
     private var modifierHoldWorkItem: DispatchWorkItem?
+
+    private var currentTransmissionMapKey: String {
+        switch selectedTargetKind {
+        case .t3Code: "\(Self.transmissionMapKey).t3-code"
+        case .codexDesktop, nil: Self.transmissionMapKey
+        }
+    }
+
+    private var currentPinnedTaskKey: String {
+        switch selectedTargetKind {
+        case .t3Code: "pinnedTaskID.t3-code"
+        case .codexDesktop, nil: "pinnedTaskID"
+        }
+    }
 
     init(
         controlSurface: any ControlSurface,
@@ -61,59 +113,98 @@ final class AppModel {
         self.defaults = defaults
         self.controlSurface = controlSurface
         self.agentTarget = agentTarget
+        self.targetFactory = nil
+        self.selectedTargetKind = nil
         fastMode = defaults.bool(forKey: Self.fastModeKey)
-        if let data = defaults.data(forKey: Self.transmissionMapKey),
-           let saved = try? JSONDecoder().decode(TransmissionMap.self, from: data),
-           saved.isCompatible(with: agentTarget.supportedPresets) {
-            map = saved
-        } else {
-            map = agentTarget.defaultTransmissionMap
-        }
+        map = Self.loadMap(
+            defaults: defaults,
+            key: Self.transmissionMapKey,
+            target: agentTarget
+        )
+    }
+
+    init(
+        controlSurface: any ControlSurface,
+        initialTargetKind: AgentTargetKind,
+        targetFactory: @escaping (AgentTargetKind) -> any AgentTarget,
+        defaults: UserDefaults = .standard
+    ) {
+        let initialTarget = targetFactory(initialTargetKind)
+        self.defaults = defaults
+        self.controlSurface = controlSurface
+        self.agentTarget = initialTarget
+        self.targetFactory = targetFactory
+        self.selectedTargetKind = initialTargetKind
+        fastMode = defaults.bool(forKey: Self.fastModeKey)
+        let mapKey = initialTargetKind == .t3Code
+            ? "\(Self.transmissionMapKey).t3-code"
+            : Self.transmissionMapKey
+        map = Self.loadMap(
+            defaults: defaults,
+            key: mapKey,
+            target: initialTarget
+        )
     }
 
     func start() {
+        isStarted = true
         controlSurface.onConnectionChanged = { [weak self] connected in
             self?.controlSurfaceConnected = connected
             self?.publish()
         }
         controlSurface.onEvents = { [weak self] events in self?.handle(events) }
 
-        agentTarget.onStateChanged = { [weak self] state in
-            guard let self else { return }
-            self.targetDiscoveryConnected = state.discoveryConnected
-            self.targetControlConnected = state.controlConnected
-            if let message = state.message {
-                self.status = message
-            } else if state.discoveryConnected && state.controlConnected {
-                self.status = self.parked ? "Parked" : "Ready"
-            }
-            self.publish()
-        }
-        agentTarget.onTasksChanged = { [weak self] tasks in
-            guard let self else { return }
-            self.tasks = tasks
-            self.status = self.parked ? "Parked" : "Ready"
-            self.publish()
-        }
-        agentTarget.onFocusedTaskChanged = { [weak self] taskID in
-            guard let self else { return }
-            self.focusedTaskID = taskID
-            if taskID != nil, self.targetTask == nil { self.refreshTasks() }
-            self.publish()
-        }
+        wireAgentTargetCallbacks(agentTarget)
 
         controlSurface.start()
         agentTarget.start()
+        refreshTimer?.invalidate()
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.refreshTasks()
         }
     }
 
     func stop() {
+        isStarted = false
         refreshTimer?.invalidate()
+        refreshTimer = nil
         modifierHoldWorkItem?.cancel()
         controlSurface.stop()
         agentTarget.stop()
+    }
+
+    func selectAgentTarget(_ kind: AgentTargetKind) {
+        guard let targetFactory, selectedTargetKind != kind else { return }
+        defaults.set(kind.rawValue, forKey: AgentTargetKind.userDefaultsKey)
+
+        let previousTarget = agentTarget
+        previousTarget.onStateChanged = nil
+        previousTarget.onTasksChanged = nil
+        previousTarget.onFocusedTaskChanged = nil
+        previousTarget.stop()
+
+        selectedTargetKind = kind
+        let nextTarget = targetFactory(kind)
+        agentTarget = nextTarget
+
+        tasks = []
+        focusedTaskID = nil
+        targetDiscoveryConnected = false
+        targetControlConnected = false
+        lastGear = nil
+        currentPreset = nil
+        map = Self.loadMap(
+            defaults: defaults,
+            key: currentTransmissionMapKey,
+            target: nextTarget
+        )
+        status = parked ? "Parked" : "Connecting to \(nextTarget.name)…"
+
+        if isStarted {
+            wireAgentTargetCallbacks(nextTarget)
+            nextTarget.start()
+        }
+        publish()
     }
 
     func reconnect() {
@@ -127,14 +218,18 @@ final class AppModel {
     }
 
     func selectAutomaticTarget() {
-        defaults.removeObject(forKey: "pinnedTaskID")
-        defaults.removeObject(forKey: "pinnedThreadID")
+        defaults.removeObject(forKey: currentPinnedTaskKey)
+        if selectedTargetKind != .t3Code {
+            defaults.removeObject(forKey: "pinnedThreadID")
+        }
         publish()
     }
 
     func pinTarget(_ taskID: String) {
-        defaults.set(taskID, forKey: "pinnedTaskID")
-        defaults.removeObject(forKey: "pinnedThreadID")
+        defaults.set(taskID, forKey: currentPinnedTaskKey)
+        if selectedTargetKind != .t3Code {
+            defaults.removeObject(forKey: "pinnedThreadID")
+        }
         publish()
     }
 
@@ -167,9 +262,59 @@ final class AppModel {
 
     func restoreDefaultMap() {
         map = agentTarget.defaultTransmissionMap
-        persistMap()
+        defaults.removeObject(forKey: currentTransmissionMapKey)
         status = "Default transmission restored · shift to apply"
         publish()
+    }
+
+    private func wireAgentTargetCallbacks(_ target: any AgentTarget) {
+        target.onStateChanged = { [weak self, weak target] state in
+            guard let self, let target, self.agentTarget === target else { return }
+            self.targetDiscoveryConnected = state.discoveryConnected
+            self.targetControlConnected = state.controlConnected
+            self.syncMapWithCurrentTargetPresets()
+            if let message = state.message {
+                self.status = message
+            } else if state.discoveryConnected && state.controlConnected {
+                self.status = self.parked ? "Parked" : "Ready"
+            }
+            self.publish()
+        }
+        target.onTasksChanged = { [weak self, weak target] tasks in
+            guard let self, let target, self.agentTarget === target else { return }
+            self.tasks = tasks
+            self.status = self.parked ? "Parked" : "Ready"
+            self.publish()
+        }
+        target.onFocusedTaskChanged = { [weak self, weak target] taskID in
+            guard let self, let target, self.agentTarget === target else { return }
+            self.focusedTaskID = taskID
+            if taskID != nil, self.targetTask == nil { self.refreshTasks() }
+            self.publish()
+        }
+    }
+
+    private func syncMapWithCurrentTargetPresets() {
+        if let data = defaults.data(forKey: currentTransmissionMapKey),
+           let saved = try? JSONDecoder().decode(TransmissionMap.self, from: data),
+           saved.isCompatible(with: agentTarget.supportedPresets) {
+            map = saved
+        } else {
+            map = agentTarget.defaultTransmissionMap
+        }
+    }
+
+    private static func loadMap(
+        defaults: UserDefaults,
+        key: String,
+        target: any AgentTarget
+    ) -> TransmissionMap {
+        if let data = defaults.data(forKey: key),
+           let saved = try? JSONDecoder().decode(TransmissionMap.self, from: data),
+           saved.isCompatible(with: target.supportedPresets) {
+            return saved
+        }
+        return target.defaultTransmissionMap
     }
 
     func openTarget() {
@@ -232,11 +377,12 @@ final class AppModel {
             status = "\(agentTarget.name) control disconnected"
             return
         }
-        agentTarget.apply(
+        let activeTarget = agentTarget
+        activeTarget.apply(
             .init(preset: preset, fastMode: fastMode),
             to: targetTask.id
-        ) { [weak self] result in
-            guard let self else { return }
+        ) { [weak self, weak activeTarget] result in
+            guard let self, let activeTarget, self.agentTarget === activeTarget else { return }
             switch result {
             case .success:
                 self.status = "\(targetTask.title) · \(preset.displayLabel) · \(self.fastMode ? "Fast" : "Standard")"
@@ -298,8 +444,9 @@ final class AppModel {
 
         status = "Setting \(targetTask.title) to \(label)…"
         publish()
-        agentTarget.apply(.init(fastMode: fastMode), to: targetTask.id) { [weak self] result in
-            guard let self else { return }
+        let activeTarget = agentTarget
+        activeTarget.apply(.init(fastMode: fastMode), to: targetTask.id) { [weak self, weak activeTarget] result in
+            guard let self, let activeTarget, self.agentTarget === activeTarget else { return }
             switch result {
             case .success:
                 self.status = "\(targetTask.title) · \(label)"
@@ -312,7 +459,7 @@ final class AppModel {
 
     private func persistMap() {
         guard let data = try? JSONEncoder().encode(map) else { return }
-        defaults.set(data, forKey: Self.transmissionMapKey)
+        defaults.set(data, forKey: currentTransmissionMapKey)
     }
 
     private func publish() { onChange?() }

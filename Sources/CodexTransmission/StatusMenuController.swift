@@ -95,9 +95,19 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         fast.state = model.fastMode ? .on : .off
         menu.addItem(fast)
 
-        let target = NSMenuItem(title: targetTitle, action: nil, keyEquivalent: "")
-        target.submenu = targetMenu()
-        menu.addItem(target)
+        if !model.availableTargetKinds.isEmpty {
+            let agentTargetItem = NSMenuItem(
+                title: "Target · \(model.selectedTargetKind?.displayName ?? model.agentTargetName)",
+                action: nil,
+                keyEquivalent: ""
+            )
+            agentTargetItem.submenu = agentTargetMenu()
+            menu.addItem(agentTargetItem)
+        }
+
+        let task = NSMenuItem(title: taskTitle, action: nil, keyEquivalent: "")
+        task.submenu = taskMenu()
+        menu.addItem(task)
 
         let open = NSMenuItem(title: "Open target task", action: #selector(openTarget), keyEquivalent: "o")
         open.target = self
@@ -148,10 +158,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.addItem(quit)
     }
 
-    private var targetTitle: String {
-        guard let task = model.targetTask else { return "Target · none" }
+    private var taskTitle: String {
+        guard let task = model.targetTask else { return "Task · none" }
         let mode = model.targetSelection == .automatic ? "Auto" : "Pinned"
-        return "Target · \(mode) · \(task.title)"
+        return "Task · \(mode) · \(task.title)"
     }
 
     private var launchAtLoginTitle: String {
@@ -163,7 +173,23 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
     }
 
-    private func targetMenu() -> NSMenu {
+    private func agentTargetMenu() -> NSMenu {
+        let submenu = NSMenu()
+        for kind in model.availableTargetKinds {
+            let item = NSMenuItem(
+                title: kind.displayName,
+                action: #selector(selectAgentTarget(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = kind.rawValue
+            item.state = model.selectedTargetKind == kind ? .on : .off
+            submenu.addItem(item)
+        }
+        return submenu
+    }
+
+    private func taskMenu() -> NSMenu {
         let submenu = NSMenu()
         let automatic = NSMenuItem(
             title: "Auto · focused \(model.agentTargetName) task",
@@ -223,6 +249,12 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     @objc private func reconnect() { model.reconnect() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
     @objc private func restoreDefaults() { model.restoreDefaultMap() }
+
+    @objc private func selectAgentTarget(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let kind = AgentTargetKind(rawValue: raw) else { return }
+        model.selectAgentTarget(kind)
+    }
 
     @objc private func selectTask(_ sender: NSMenuItem) {
         guard let taskID = sender.representedObject as? String else { return }
