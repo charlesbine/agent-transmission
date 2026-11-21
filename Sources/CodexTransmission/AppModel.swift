@@ -6,6 +6,7 @@ final class AppModel {
     private static let transmissionMapKey = "transmissionMap.v1"
     private static let fastModeKey = "fastMode.v1"
     private static let fastModeHoldDuration: TimeInterval = 2
+    private static let backgroundRefreshInterval: TimeInterval = 30
 
     var onChange: (() -> Void)?
 
@@ -104,8 +105,8 @@ final class AppModel {
 
         controlSurface.start()
         agentTarget.start()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            self?.refreshTasks()
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: Self.backgroundRefreshInterval, repeats: true) { [weak self] _ in
+            self?.refreshTasksIfActive()
         }
     }
 
@@ -123,6 +124,11 @@ final class AppModel {
     }
 
     func refreshTasks() {
+        agentTarget.refreshTasks()
+    }
+
+    func refreshTasksIfActive() {
+        guard targetControlConnected else { return }
         agentTarget.refreshTasks()
     }
 
