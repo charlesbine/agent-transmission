@@ -189,11 +189,21 @@ private struct FloatingShiftHUDView: View {
     private func compactToast(_ payload: ShiftHUDPayload) -> some View {
         HStack(spacing: 12) {
             badgeView(for: payload)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(payload.headline)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(payload.headline)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                    if payload.isError, let threadTitle = payload.threadTitle, !threadTitle.isEmpty {
+                        Text(threadTitle.uppercased())
+                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                            .foregroundColor(Color.white.opacity(0.42))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
                 Text(payload.detail)
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundColor(Color.white.opacity(0.72))

@@ -1010,8 +1010,9 @@ final class AppModel: ObservableObject {
             case .success:
                 self.status = "\(targetTask.title) · \(preset.displayLabel) · \(self.fastMode ? "Fast" : "Standard")"
             case let .failure(error):
-                self.status = error.localizedDescription
-                self.emitErrorHUD(headline: "Shift Rejected", detail: error.localizedDescription)
+                let presented = ShiftErrorPresenter.present(error)
+                self.status = "\(presented.headline) — \(presented.detail)"
+                self.emitErrorHUD(headline: presented.headline, detail: presented.detail)
             }
             self.publish()
         }
@@ -1170,18 +1171,17 @@ final class AppModel: ObservableObject {
     private func emitErrorHUD(headline: String, detail: String) {
         guard bindings.showFloatingHUD else { return }
         let resolved = resolveActiveLayer()
-        let contextPrefix = targetTask.map { "\($0.title): " } ?? ""
         let payload = ShiftHUDPayload(
             kind: .error,
             layer: resolved.layer,
             layerSourceLabel: nil,
             headline: headline,
-            detail: "\(contextPrefix)\(detail)",
+            detail: detail,
             threadTitle: targetTask?.title,
             slots: [],
             reverseLabel: reverseSlotLabel(),
             isError: true,
-            autoHideDelay: 3.0,
+            autoHideDelay: 4.0,
             modifierActive: false
         )
         onHUDUpdate?(payload)
