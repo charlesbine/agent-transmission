@@ -38,7 +38,11 @@ I ordered a NiTHO `GS-SH Gearshifter`, wired it straight into macOS IOKit USB HI
 The HUD stays completely out of your way while you code, then wakes up the instant your hand touches the shifter — non-activating, zero focus stealing, and click-through-friendly with a clickable `×` dismiss button:
 
 <p align="center">
-  <img src="docs/assets/hud-showcase.png" alt="Agent Transmission Floating Shift HUD — Gear-to-Neutral Decision HUD, Engaged Gear Confirmation, One-Shot Tap (P) Effort Layer, and Live (P) Hold Progress Guide" width="100%" />
+  <img src="docs/assets/macos-hud-in-action.png" alt="Agent Transmission Floating Shift HUD in action on macOS — Neutral Decision HUD floating below T3 Code with live H-gate N icon in the macOS menu bar" width="100%" />
+</p>
+
+<p align="center">
+  <img src="docs/assets/hud-showcase.png" alt="Agent Transmission Floating Shift HUD modes — Gear-to-Neutral Decision HUD, Engaged Gear Confirmation, One-Shot Tap (P) Effort Layer, and Live (P) Hold Progress Guide" width="100%" />
 </p>
 
 - **01 · Neutral Decision HUD (Gear → Neutral):** Pull the lever out of gear into Neutral and the full 6+R H-gate map floats into view with the Neutral spine lit, your current active model highlighted, a draining countdown bar (configurable `4s`, `8s`, `15s`, or `Until back in gear`), and a live modifier legend.
@@ -52,6 +56,10 @@ The HUD stays completely out of your way while you code, then wakes up the insta
 ## Menu-Bar Popover & Live H-Gate
 
 Clicking the fixed-width H-gate icon in your macOS menu bar opens a persistent dark SwiftUI popover that stays open while you map gears, inspect live state, or switch targets — with zero menu-bar jitter as you shift:
+
+<p align="center">
+  <img src="docs/assets/macos-menubar-popover.png" alt="Agent Transmission macOS menu bar with highlighted H-gate 4 icon and persistent SwiftUI popover anchored underneath alongside T3 Code" width="100%" />
+</p>
 
 <p align="center">
   <img src="docs/assets/popover-showcase.png" alt="Agent Transmission SwiftUI Menu-Bar Popover — Gearbox tab with live H-gate, LIVE vs EDIT state, and Favorites Sync next to Controls tab with switches, modifier layers, and HUD timers" width="100%" />
