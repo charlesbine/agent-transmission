@@ -94,6 +94,7 @@ final class AppModel: ObservableObject {
     private static let bindingsKey = "transmissionBindings.v2"
     private static let fastModeKey = "fastMode.v1"
     private static let parkHoldDuration: TimeInterval = 1.2
+    private static let backgroundRefreshInterval: TimeInterval = 30
 
     var onChange: (() -> Void)?
     var onHUDUpdate: ((ShiftHUDPayload) -> Void)?
@@ -257,8 +258,8 @@ final class AppModel: ObservableObject {
         controlSurface.start()
         agentTarget.start()
         refreshTimer?.invalidate()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            self?.refreshTasks()
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: Self.backgroundRefreshInterval, repeats: true) { [weak self] _ in
+            self?.refreshTasksIfActive()
         }
     }
 
@@ -322,6 +323,11 @@ final class AppModel: ObservableObject {
     }
 
     func refreshTasks() {
+        agentTarget.refreshTasks()
+    }
+
+    func refreshTasksIfActive() {
+        guard targetControlConnected else { return }
         agentTarget.refreshTasks()
     }
 

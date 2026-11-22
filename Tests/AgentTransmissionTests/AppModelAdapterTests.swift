@@ -24,6 +24,32 @@ final class AppModelAdapterTests: XCTestCase {
         XCTAssertTrue(surface.stopped)
         XCTAssertTrue(target.stopped)
     }
+
+    func testBackgroundRefreshSkipsWhenControlDisconnected() {
+        let suiteName = "AppModelAdapterTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let surface = AppModelFakeSurface()
+        let target = AppModelFakeTarget()
+        let model = AppModel(controlSurface: surface, agentTarget: target, defaults: defaults)
+
+        model.start()
+        target.refreshCount = 0
+
+        target.onStateChanged?(.init(discoveryConnected: true, controlConnected: false))
+        model.refreshTasksIfActive()
+        XCTAssertEqual(target.refreshCount, 0)
+
+        target.onStateChanged?(.init(discoveryConnected: true, controlConnected: true))
+        model.refreshTasksIfActive()
+        XCTAssertEqual(target.refreshCount, 1)
+
+        model.stop()
+    }
+
+    func testListTasksUsesStateDbOnly() {
+        XCTAssertEqual(CodexAppServerClient.listTasksParams["useStateDbOnly"] as? Bool, true)
+    }
 }
 
 private final class AppModelFakeSurface: ControlSurface {
@@ -56,6 +82,7 @@ private final class AppModelFakeTarget: AgentTarget {
     var onFocusedTaskChanged: ((String?) -> Void)?
     var started = false
     var stopped = false
+    var refreshCount = 0
     var lastTaskID: String?
     var lastUpdate: AgentSettingsUpdate?
 
@@ -68,7 +95,7 @@ private final class AppModelFakeTarget: AgentTarget {
 
     func stop() { stopped = true }
     func reconnect() {}
-    func refreshTasks() {}
+    func refreshTasks() { refreshCount += 1 }
     func stepEffort(from preset: ModelPreset, direction: Int) -> ModelPreset { preset }
     func stepModelFamily(from preset: ModelPreset, direction: Int) -> ModelPreset { preset }
     func taskURL(for taskID: String) -> URL? { nil }
