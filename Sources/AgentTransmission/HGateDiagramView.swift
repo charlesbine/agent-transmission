@@ -105,9 +105,9 @@ struct HGateDiagramView: View {
 
     private var isHUD: Bool { style == .hud }
 
-    private var columnSpacing: CGFloat { isHUD ? 12 : 8 }
-    private var cardHeight: CGFloat { isHUD ? 72 : 58 }
-    private var channelHeight: CGFloat { isHUD ? 44 : 30 }
+    private var columnSpacing: CGFloat { isHUD ? 12 : 7 }
+    private var cardHeight: CGFloat { isHUD ? 72 : 50 }
+    private var channelHeight: CGFloat { isHUD ? 44 : 22 }
 
     private func slot(at index: Int) -> HUDGateSlot? {
         slots.first(where: { $0.position.rawValue == index })

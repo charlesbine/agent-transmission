@@ -20,7 +20,7 @@ final class StatusMenuController: NSObject {
 
         popover.behavior = .transient
         popover.animates = true
-        popover.contentSize = NSSize(width: 432, height: 636)
+        popover.contentSize = NSSize(width: 456, height: 760)
         popover.contentViewController = NSHostingController(
             rootView: PopoverAppView(
                 model: model,

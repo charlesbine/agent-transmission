@@ -81,7 +81,7 @@ struct PopoverAppView: View {
             Divider().overlay(Color.white.opacity(0.08))
             footerBar
         }
-        .frame(width: 432, height: 636)
+        .frame(width: 456, height: 760)
         .background(Color(red: 0.065, green: 0.078, blue: 0.102))
         .preferredColorScheme(.dark)
     }
@@ -511,6 +511,12 @@ struct PopoverAppView: View {
                         ForEach(filteredCatalog) { entry in
                             let isAssigned = selectedPreset.model == entry.slug
                                 && (selectedPreset.provider == nil || selectedPreset.provider == entry.providerInstanceID)
+                            let cleanRowName: String = {
+                                let suffix = " (\(entry.providerLabel))"
+                                return entry.displayName.hasSuffix(suffix)
+                                    ? String(entry.displayName.dropLast(suffix.count))
+                                    : entry.displayName
+                            }()
                             Button {
                                 let chosenEffort = entry.supportedEfforts.contains(selectedPreset.effort)
                                     ? selectedPreset.effort
@@ -526,14 +532,14 @@ struct PopoverAppView: View {
                                             .font(.system(size: 8.5))
                                             .foregroundColor(Color(hex: "#F59E0B"))
                                     }
-                                    Text(entry.displayName)
+                                    Text(cleanRowName)
                                         .font(.system(size: 11.5, weight: isAssigned ? .semibold : .regular))
                                         .foregroundColor(.white)
                                         .lineLimit(1)
                                     Spacer(minLength: 4)
                                     Text(entry.providerLabel)
                                         .font(.system(size: 9.5))
-                                        .foregroundColor(Color.white.opacity(0.42))
+                                        .foregroundColor(Color.white.opacity(0.45))
                                     if isAssigned {
                                         Image(systemName: "checkmark")
                                             .font(.system(size: 10, weight: .bold))
@@ -551,8 +557,9 @@ struct PopoverAppView: View {
                         }
                     }
                     .padding(.horizontal, 14)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 10)
                 }
+                .frame(maxHeight: .infinity)
             } else {
                 Spacer()
                 Text("Reverse (R) is bound to \"\(model.bindings.reverseAction.displayLabel)\".\nSwitch to Review Preset or 7th Gear above to assign a model.")
