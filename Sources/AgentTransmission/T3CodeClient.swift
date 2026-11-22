@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import os
 
-private let t3Log = Logger(subsystem: "com.metaember.agent-transmission", category: "T3Code")
+private let t3Log = Logger(subsystem: "com.charlesbine.agent-transmission", category: "T3Code")
 
 // MARK: - Protocol Models
 
