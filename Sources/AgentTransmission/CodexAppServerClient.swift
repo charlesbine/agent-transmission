@@ -25,7 +25,7 @@ final class CodexAppServerClient {
 
     var onDisconnected: ((String) -> Void)?
 
-    private let queue = DispatchQueue(label: "CodexTransmission.AppServer")
+    private let queue = DispatchQueue(label: "AgentTransmission.AppServer")
     private var process: Process?
     private var input: FileHandle?
     private var outputBuffer = Data()
@@ -70,8 +70,8 @@ final class CodexAppServerClient {
                 self.input = stdin.fileHandleForWriting
                 self.requestLocked(method: "initialize", params: [
                     "clientInfo": [
-                        "name": "codex_transmission",
-                        "title": "Codex Transmission",
+                        "name": "agent_transmission",
+                        "title": "Agent Transmission",
                         "version": "0.1.0",
                     ],
                     "capabilities": ["experimentalApi": false],

@@ -153,7 +153,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let reconnect = NSMenuItem(title: "Reconnect", action: #selector(reconnect), keyEquivalent: "r")
         reconnect.target = self
         menu.addItem(reconnect)
-        let quit = NSMenuItem(title: "Quit Codex Transmission", action: #selector(quit), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit Agent Transmission", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
     }

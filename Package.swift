@@ -7,12 +7,12 @@ let package = Package(
     platforms: [.macOS(.v13)],
     products: [
         .library(name: "AgentTransmissionCore", targets: ["AgentTransmissionCore"]),
-        .executable(name: "CodexTransmission", targets: ["CodexTransmission"]),
+        .executable(name: "AgentTransmission", targets: ["AgentTransmission"]),
     ],
     targets: [
         .target(name: "AgentTransmissionCore"),
         .executableTarget(
-            name: "CodexTransmission",
+            name: "AgentTransmission",
             dependencies: ["AgentTransmissionCore"],
             linkerSettings: [
                 .linkedFramework("AppKit"),
@@ -22,7 +22,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AgentTransmissionTests",
-            dependencies: ["AgentTransmissionCore", "CodexTransmission"]
+            dependencies: ["AgentTransmissionCore", "AgentTransmission"]
         ),
     ]
 )

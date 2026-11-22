@@ -369,8 +369,8 @@ final class T3CodeClient: T3CodeClientProtocol {
     private let t3Home: String
     private let t3Bin: String
     private let sessionFilePath: String
-    private let queue = DispatchQueue(label: "CodexTransmission.T3CodeClient")
-    private let authQueue = DispatchQueue(label: "CodexTransmission.T3CodeAuth", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "AgentTransmission.T3CodeClient")
+    private let authQueue = DispatchQueue(label: "AgentTransmission.T3CodeAuth", qos: .userInitiated)
     private let delegateProxy = T3WebSocketDelegateProxy()
     private let urlSession: URLSession
 

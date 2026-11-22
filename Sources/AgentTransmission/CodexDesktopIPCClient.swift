@@ -26,7 +26,7 @@ final class CodexDesktopIPCClient {
     var onDisconnected: ((String) -> Void)?
     var onFocusedThreadChanged: ((String?) -> Void)?
 
-    private let queue = DispatchQueue(label: "CodexTransmission.DesktopIPC")
+    private let queue = DispatchQueue(label: "AgentTransmission.DesktopIPC")
     private var connection: NWConnection?
     private var buffer = Data()
     private var clientID: String?
@@ -62,7 +62,7 @@ final class CodexDesktopIPCClient {
             case .ready:
                 self.receiveNext(from: connection)
                 self.sendRequestLocked(method: "initialize", params: [
-                    "clientType": "codex-transmission",
+                    "clientType": "agent-transmission",
                 ], version: 0, requiresInitialization: false) { [weak self, weak connection] result in
                     guard let self, self.connection === connection else { return }
                     switch result {

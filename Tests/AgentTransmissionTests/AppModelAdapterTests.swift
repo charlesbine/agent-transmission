@@ -1,5 +1,5 @@
 import XCTest
-@testable import CodexTransmission
+@testable import AgentTransmission
 @testable import AgentTransmissionCore
 
 final class AppModelAdapterTests: XCTestCase {

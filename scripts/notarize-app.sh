@@ -2,11 +2,11 @@
 set -eu
 
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-APP_PATH=${1:-"$PROJECT_DIR/dist/Codex Transmission.app"}
-PROFILE=${CODEX_TRANSMISSION_NOTARY_PROFILE:-}
+APP_PATH=${1:-"$PROJECT_DIR/dist/Agent Transmission.app"}
+PROFILE=${AGENT_TRANSMISSION_NOTARY_PROFILE:-${CODEX_TRANSMISSION_NOTARY_PROFILE:-}}
 
 if [ -z "$PROFILE" ]; then
-    echo "Set CODEX_TRANSMISSION_NOTARY_PROFILE to an xcrun notarytool keychain profile." >&2
+    echo "Set AGENT_TRANSMISSION_NOTARY_PROFILE to an xcrun notarytool keychain profile." >&2
     exit 2
 fi
 
@@ -24,9 +24,9 @@ case "$SIGNATURE" in
 esac
 
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PATH/Contents/Info.plist")
-UPLOAD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/codex-transmission-notary.XXXXXX")
-UPLOAD_ZIP="$UPLOAD_DIR/Codex-Transmission-$VERSION-macOS.zip"
-FINAL_ZIP="$PROJECT_DIR/dist/Codex-Transmission-$VERSION-macOS.zip"
+UPLOAD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/agent-transmission-notary.XXXXXX")
+UPLOAD_ZIP="$UPLOAD_DIR/Agent-Transmission-$VERSION-macOS.zip"
+FINAL_ZIP="$PROJECT_DIR/dist/Agent-Transmission-$VERSION-macOS.zip"
 trap 'rm -rf "$UPLOAD_DIR"' EXIT
 
 /usr/bin/ditto -c -k --norsrc --noextattr --noacl --keepParent "$APP_PATH" "$UPLOAD_ZIP"

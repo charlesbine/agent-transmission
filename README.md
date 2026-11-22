@@ -27,7 +27,7 @@ no telemetry and does not send prompts or task contents anywhere.
 
 ## Install
 
-Download the release ZIP, move **Codex Transmission.app** to Applications, open it, and plug in the
+Download the release ZIP, move **Agent Transmission.app** to Applications, open it, and plug in the
 shifter. The app has no Dock icon; its current gear and preset appear in the menu bar.
 
 Use the menu bar's **Target** submenu to switch between **T3 Code** and **Codex Desktop** at
@@ -144,7 +144,7 @@ callbacks are delivered on the main thread because they update menu-bar state.
 
 ```sh
 swift test
-swift run CodexTransmission
+swift run AgentTransmission
 ```
 
 Build an ad-hoc-signed app and versioned release ZIP:
@@ -156,14 +156,14 @@ Build an ad-hoc-signed app and versioned release ZIP:
 For Developer ID distribution, set the exact signing identity before packaging:
 
 ```sh
-CODEX_TRANSMISSION_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+AGENT_TRANSMISSION_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
   ./scripts/package-app.sh
 ```
 
 After creating a `notarytool` keychain profile, notarize, staple, and recreate the release ZIP:
 
 ```sh
-CODEX_TRANSMISSION_NOTARY_PROFILE="codex-transmission" \
+AGENT_TRANSMISSION_NOTARY_PROFILE="agent-transmission" \
   ./scripts/notarize-app.sh
 ```
 
