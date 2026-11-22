@@ -25,7 +25,7 @@
 
 I saw someone float the concept of shifting coding-agent models and reasoning effort with a physical manual gearshifter on X, and **I HAD to build it — so I did.**
 
-Switching models and reasoning levels through nested dropdowns always broke my flow. You're deep in a diff, you know you want a fast Haiku/Flash pass or a full-send Opus/Ultra reasoning run, and suddenly you're hunting tiny menus with a cursor. Meanwhile, a **$40 6-speed + Reverse sim-racing USB shifter** with a mechanical H-gate, sequential mode switch, and physical `(P)` rocker exists.
+Switching models and reasoning levels through nested dropdowns always broke my flow. You're deep in a diff, you know you want a fast **Haiku 5.5** / **Hydrogen** pass, a daily-driver **Fable 5.2** / **Gemini 4 Neon** edit, or a full-send **Opus 5.5** / **GPT-6.2 Sol** reasoning run, and suddenly you're hunting tiny menus with a cursor. Meanwhile, a **$40 6-speed + Reverse sim-racing USB shifter** with a mechanical H-gate, sequential mode switch, and physical `(P)` rocker exists.
 
 I ordered a NiTHO `GS-SH Gearshifter`, wired it straight into macOS IOKit USB HID, and built **Agent Transmission** — a zero-dependency native Swift menu-bar app that talks directly to **T3 Code** (over native Orchestration V2 WebSocket RPC across Claude, Codex, Antigravity, and OpenCode) and **Codex Desktop** (over local Unix IPC).
 
@@ -127,21 +127,23 @@ Download the release ZIP, drag **Agent Transmission.app** to `/Applications`, la
 - **Live catalog & thread sync:** Subscribes to `subscribeServerConfig` and `orchestration.subscribeShell` to discover connected providers, `★ Favorites`, per-model option descriptors (`effort`, `reasoningEffort`, `thought_level`, `fastMode`, `serviceTier`), interaction mode (`Plan` / `Code`), and runtime permission mode (`Ask` / `Edits` / `Auto` / `Full`).
 - **Focused thread tracking & deep links:** Follows the active thread automatically (or pin any thread from the popover header) and opens it directly via `t3code://threads/<environmentId>/<threadId>`.
 
+Example Fast → Smart 6+R T3 Code transmission map (auto-populated from your `★ Favorites`):
+
+| Gear | Model | Provider | Typical Use |
+| --- | --- | --- | --- |
+| `1` | **Claude Haiku 5.5** (`claude-haiku-5-5`) | Claude | Instant edits & quick checks |
+| `2` | **Gemini 4 Hydrogen** (`gemini-4-hydrogen`) | Antigravity | Fast multi-file sweeps |
+| `3` | **Claude Fable 5.2** (`claude-fable-5-2`) | Claude | Daily driver coding & writing |
+| `4` | **Gemini 4 Neon** (`gemini-4-neon`) | Antigravity | Deep reasoning & refactors |
+| `5` | **GPT-6.2 Sol** (`gpt-6.2-sol`) | Codex | Hard debugging & systems work |
+| `6` | **Claude Opus 5.5** (`claude-opus-5-5`) | Claude | Full-send architecture & review |
+| `R` | **Toggle Plan ↔ Code** *(customizable)* | T3 Code | Flip Plan mode or interrupt active run |
+
 ### Codex Desktop (Experimental Local IPC)
 
 Task discovery uses the documented local Codex app-server protocol via the installed Codex CLI. Focused-task detection and settings writes talk directly to Codex Desktop's versioned, user-owned local Unix IPC router at `~/.codex/ipc/ipc.sock`, because the app-server API does not yet expose a stable way to mutate an already-open Desktop-owned task.
 
-| Position | Default Codex Preset | Model | Effort |
-| --- | --- | --- | --- |
-| 1 | Luna Max | `gpt-5.6-luna` | `max` |
-| 2 | Sol Medium | `gpt-5.6-sol` | `medium` |
-| 3 | Sol High | `gpt-5.6-sol` | `high` |
-| 4 | Sol XHigh | `gpt-5.6-sol` | `xhigh` |
-| 5 | Sol Max | `gpt-5.6-sol` | `max` |
-| 6 | Sol Ultra | `gpt-5.6-sol` | `ultra` |
-| R | Review | `gpt-5.6-sol` | `max` |
-
-Every slot is customizable per target and persisted independently. Because the Codex Desktop IPC boundary is experimental, Agent Transmission never falls back to Accessibility/UI scripting — it fails closed with a clear status message and automatically reconnects with bounded backoff when T3 Code or Codex restarts. Settings apply to subsequent turns and never replay silently on Neutral, focus change, remapping, or parking-brake release.
+Every slot (`1`–`6` and `R`) is customizable per target and persisted independently. Because the Codex Desktop IPC boundary is experimental, Agent Transmission never falls back to Accessibility/UI scripting — it fails closed with a clear status message and automatically reconnects with bounded backoff when T3 Code or Codex restarts. Settings apply to subsequent turns and never replay silently on Neutral, focus change, remapping, or parking-brake release.
 
 ---
 
