@@ -383,6 +383,8 @@ struct T3ThreadShell: Codable, Equatable, Sendable {
     let title: String
     let providerInstanceId: String
     let modelSelection: T3ModelSelection
+    let runtimeMode: String?
+    let interactionMode: String?
     let status: String?
     let activeRunId: String?
     let latestRunId: String?
@@ -404,6 +406,8 @@ struct T3ThreadShell: Codable, Equatable, Sendable {
         title: String,
         providerInstanceId: String,
         modelSelection: T3ModelSelection,
+        runtimeMode: String? = nil,
+        interactionMode: String? = nil,
         status: String? = nil,
         activeRunId: String? = nil,
         latestRunId: String? = nil,
@@ -424,6 +428,8 @@ struct T3ThreadShell: Codable, Equatable, Sendable {
         self.title = title
         self.providerInstanceId = providerInstanceId
         self.modelSelection = modelSelection
+        self.runtimeMode = runtimeMode
+        self.interactionMode = interactionMode
         self.status = status
         self.activeRunId = activeRunId
         self.latestRunId = latestRunId
@@ -448,6 +454,8 @@ struct T3ThreadShell: Codable, Equatable, Sendable {
         providerInstanceId = (try? container.decodeIfPresent(String.self, forKey: .providerInstanceId)) ?? ""
         modelSelection = (try? container.decodeIfPresent(T3ModelSelection.self, forKey: .modelSelection))
             ?? T3ModelSelection(instanceId: nil, model: "")
+        runtimeMode = try? container.decodeIfPresent(String.self, forKey: .runtimeMode)
+        interactionMode = try? container.decodeIfPresent(String.self, forKey: .interactionMode)
         status = try? container.decodeIfPresent(String.self, forKey: .status)
         activeRunId = try? container.decodeIfPresent(String.self, forKey: .activeRunId)
         latestRunId = try? container.decodeIfPresent(String.self, forKey: .latestRunId)
@@ -542,12 +550,62 @@ protocol T3CodeClientProtocol: AnyObject {
         selection: T3ModelSelection,
         completion: @escaping (Result<Void, Error>) -> Void
     )
+    func setInteractionMode(
+        threadID: String,
+        interactionMode: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    )
+    func setRuntimeMode(
+        threadID: String,
+        runtimeMode: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    )
+    func interruptRun(
+        threadID: String,
+        runID: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    )
+    func settleThread(
+        threadID: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    )
 }
 
 extension T3CodeClientProtocol {
     var onShellBatch: (([T3ShellEvent]) -> Void)? {
         get { nil }
         set {}
+    }
+
+    func setInteractionMode(
+        threadID: String,
+        interactionMode: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        completion(.success(()))
+    }
+
+    func setRuntimeMode(
+        threadID: String,
+        runtimeMode: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        completion(.success(()))
+    }
+
+    func interruptRun(
+        threadID: String,
+        runID: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        completion(.success(()))
+    }
+
+    func settleThread(
+        threadID: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        completion(.success(()))
     }
 }
 
@@ -787,6 +845,77 @@ final class T3CodeClient: T3CodeClientProtocol {
             case let .failure(error):
                 t3Log.error("thread.model-selection.set failed thread=\(threadID, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
+            let mapped: Result<Void, Error> = result.map { _ in () }
+            self?.deliver { completion(mapped) }
+        }
+    }
+
+    func setInteractionMode(
+        threadID: String,
+        interactionMode: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        let command: JSON = [
+            "type": "thread.interaction-mode.set",
+            "commandId": "cmd:\(UUID().uuidString.lowercased())",
+            "threadId": threadID,
+            "interactionMode": interactionMode,
+        ]
+        t3Log.info("Dispatching thread.interaction-mode.set thread=\(threadID, privacy: .public) mode=\(interactionMode, privacy: .public)")
+        callRpc(tag: "orchestration.dispatchCommand", payload: command) { [weak self] result in
+            let mapped: Result<Void, Error> = result.map { _ in () }
+            self?.deliver { completion(mapped) }
+        }
+    }
+
+    func setRuntimeMode(
+        threadID: String,
+        runtimeMode: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        let command: JSON = [
+            "type": "thread.runtime-mode.set",
+            "commandId": "cmd:\(UUID().uuidString.lowercased())",
+            "threadId": threadID,
+            "runtimeMode": runtimeMode,
+        ]
+        t3Log.info("Dispatching thread.runtime-mode.set thread=\(threadID, privacy: .public) mode=\(runtimeMode, privacy: .public)")
+        callRpc(tag: "orchestration.dispatchCommand", payload: command) { [weak self] result in
+            let mapped: Result<Void, Error> = result.map { _ in () }
+            self?.deliver { completion(mapped) }
+        }
+    }
+
+    func interruptRun(
+        threadID: String,
+        runID: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        let command: JSON = [
+            "type": "run.interrupt",
+            "commandId": "cmd:\(UUID().uuidString.lowercased())",
+            "threadId": threadID,
+            "runId": runID,
+            "reason": "Interrupted from Agent Transmission",
+        ]
+        t3Log.info("Dispatching run.interrupt thread=\(threadID, privacy: .public) run=\(runID, privacy: .public)")
+        callRpc(tag: "orchestration.dispatchCommand", payload: command) { [weak self] result in
+            let mapped: Result<Void, Error> = result.map { _ in () }
+            self?.deliver { completion(mapped) }
+        }
+    }
+
+    func settleThread(
+        threadID: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        let command: JSON = [
+            "type": "thread.settle",
+            "commandId": "cmd:\(UUID().uuidString.lowercased())",
+            "threadId": threadID,
+        ]
+        t3Log.info("Dispatching thread.settle thread=\(threadID, privacy: .public)")
+        callRpc(tag: "orchestration.dispatchCommand", payload: command) { [weak self] result in
             let mapped: Result<Void, Error> = result.map { _ in () }
             self?.deliver { completion(mapped) }
         }

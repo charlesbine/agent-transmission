@@ -110,6 +110,315 @@ public struct AgentTask: Equatable, Sendable {
     }
 }
 
+public enum AgentInteractionMode: String, Codable, CaseIterable, Sendable {
+    case defaultMode = "default"
+    case plan = "plan"
+
+    public var displayLabel: String {
+        switch self {
+        case .defaultMode: "Code"
+        case .plan: "Plan"
+        }
+    }
+}
+
+public enum AgentRuntimeMode: String, Codable, CaseIterable, Sendable {
+    case approvalRequired = "approval-required"
+    case autoAcceptEdits = "auto-accept-edits"
+    case auto = "auto"
+    case fullAccess = "full-access"
+
+    public var shortLabel: String {
+        switch self {
+        case .approvalRequired: "Ask"
+        case .autoAcceptEdits: "Edits"
+        case .auto: "Auto"
+        case .fullAccess: "Full"
+        }
+    }
+
+    public var displayLabel: String {
+        switch self {
+        case .approvalRequired: "Ask Approval"
+        case .autoAcceptEdits: "Auto Edits"
+        case .auto: "Auto"
+        case .fullAccess: "Full Access"
+        }
+    }
+}
+
+public struct AgentThreadLiveState: Equatable, Sendable {
+    public let threadID: String
+    public let modelSlug: String
+    public let providerInstanceID: String?
+    public let modelLabel: String
+    public let effort: ReasoningEffort?
+    public let fastMode: Bool?
+    public let interactionMode: AgentInteractionMode
+    public let runtimeMode: AgentRuntimeMode
+    public let isRunning: Bool
+
+    public init(
+        threadID: String,
+        modelSlug: String,
+        providerInstanceID: String? = nil,
+        modelLabel: String,
+        effort: ReasoningEffort? = nil,
+        fastMode: Bool? = nil,
+        interactionMode: AgentInteractionMode = .defaultMode,
+        runtimeMode: AgentRuntimeMode = .auto,
+        isRunning: Bool = false
+    ) {
+        self.threadID = threadID
+        self.modelSlug = modelSlug
+        self.providerInstanceID = providerInstanceID
+        self.modelLabel = modelLabel
+        self.effort = effort
+        self.fastMode = fastMode
+        self.interactionMode = interactionMode
+        self.runtimeMode = runtimeMode
+        self.isRunning = isRunning
+    }
+}
+
+public struct CatalogModelSummary: Equatable, Identifiable, Sendable {
+    public let id: String
+    public let providerInstanceID: String
+    public let providerLabel: String
+    public let accentColorHex: String
+    public let slug: String
+    public let displayName: String
+    public let isFavorite: Bool
+    public let supportedEfforts: [ReasoningEffort]
+    public let defaultEffort: ReasoningEffort
+    public let supportsFastMode: Bool
+    public let tierRank: Int
+
+    public init(
+        providerInstanceID: String,
+        providerLabel: String,
+        accentColorHex: String,
+        slug: String,
+        displayName: String,
+        isFavorite: Bool,
+        supportedEfforts: [ReasoningEffort],
+        defaultEffort: ReasoningEffort,
+        supportsFastMode: Bool,
+        tierRank: Int
+    ) {
+        self.id = "\(providerInstanceID)::\(slug)"
+        self.providerInstanceID = providerInstanceID
+        self.providerLabel = providerLabel
+        self.accentColorHex = accentColorHex
+        self.slug = slug
+        self.displayName = displayName
+        self.isFavorite = isFavorite
+        self.supportedEfforts = supportedEfforts
+        self.defaultEffort = defaultEffort
+        self.supportsFastMode = supportsFastMode
+        self.tierRank = tierRank
+    }
+
+    public func preset(effort: ReasoningEffort? = nil) -> ModelPreset {
+        let resolvedEffort = effort.flatMap { supportedEfforts.contains($0) ? $0 : nil } ?? defaultEffort
+        return ModelPreset(
+            name: displayName,
+            model: slug,
+            effort: resolvedEffort,
+            provider: providerInstanceID
+        )
+    }
+}
+
+public enum GearboxMode: String, Codable, CaseIterable, Sendable {
+    case models
+    case effort
+    case custom
+
+    public var displayLabel: String {
+        switch self {
+        case .models: "Models"
+        case .effort: "Effort"
+        case .custom: "Custom"
+        }
+    }
+
+    public var subtitle: String {
+        switch self {
+        case .models: "1–6 switch models · ⇧/S change effort"
+        case .effort: "1–6 change effort · ⇧/S switch models"
+        case .custom: "1–6 apply exact model + effort presets"
+        }
+    }
+}
+
+public enum GearLayer: String, Codable, CaseIterable, Sendable {
+    case models
+    case effort
+    case permissions
+    case custom
+
+    public var badgeLabel: String {
+        switch self {
+        case .models: "MODELS"
+        case .effort: "EFFORT"
+        case .permissions: "MODES"
+        case .custom: "CUSTOM"
+        }
+    }
+}
+
+public enum ModifierLayerAction: String, Codable, CaseIterable, Sendable {
+    case disabled
+    case effort
+    case models
+    case permissions
+
+    public var displayLabel: String {
+        switch self {
+        case .disabled: "Disabled"
+        case .effort: "Effort (1=Low → 6=Ultra)"
+        case .models: "Model Slots (1–6)"
+        case .permissions: "T3 Modes (Ask/Edits/Auto/Full/Plan/Code)"
+        }
+    }
+}
+
+public enum ReverseGearAction: String, Codable, CaseIterable, Sendable {
+    case togglePlanMode
+    case interruptRun
+    case reviewPreset
+    case seventhGear
+    case toggleFastMode
+    case settleThread
+
+    public var displayLabel: String {
+        switch self {
+        case .togglePlanMode: "Toggle Plan ↔ Code"
+        case .interruptRun: "Interrupt Active Run"
+        case .reviewPreset: "Review Preset (R Slot)"
+        case .seventhGear: "7th Gear Slot"
+        case .toggleFastMode: "Toggle Fast Mode"
+        case .settleThread: "Settle Thread"
+        }
+    }
+
+    public var shortLabel: String {
+        switch self {
+        case .togglePlanMode: "Plan/Code"
+        case .interruptRun: "Interrupt"
+        case .reviewPreset: "Review"
+        case .seventhGear: "Slot R"
+        case .toggleFastMode: "Fast Mode"
+        case .settleThread: "Settle"
+        }
+    }
+}
+
+public enum ParkButtonAction: String, Codable, CaseIterable, Sendable {
+    case parkingBrake
+    case toggleFastMode
+    case togglePlanMode
+    case interruptRun
+    case settleThread
+    case disabled
+
+    public var displayLabel: String {
+        switch self {
+        case .parkingBrake: "Software Parking Brake"
+        case .toggleFastMode: "Toggle Fast Mode"
+        case .togglePlanMode: "Toggle Plan ↔ Code"
+        case .interruptRun: "Interrupt Active Run"
+        case .settleThread: "Settle Thread"
+        case .disabled: "Disabled"
+        }
+    }
+}
+
+public enum SequentialPaddleAction: String, Codable, CaseIterable, Sendable {
+    case stepEffort
+    case stepModels
+    case stepRuntimeMode
+    case disabled
+
+    public var displayLabel: String {
+        switch self {
+        case .stepEffort: "Step Effort (Low ↔ Ultra)"
+        case .stepModels: "Step Favorite Models"
+        case .stepRuntimeMode: "Step Permission Mode (Ask ↔ Full)"
+        case .disabled: "Disabled"
+        }
+    }
+}
+
+public struct TransmissionBindings: Codable, Equatable, Sendable {
+    public var gearboxMode: GearboxMode
+    public var reverseAction: ReverseGearAction
+    public var parkTapAction: ParkButtonAction
+    public var parkHoldAction: ParkButtonAction
+    public var parkChordLayer: ModifierLayerAction
+    public var shiftModifierLayer: ModifierLayerAction
+    public var optionModifierLayer: ModifierLayerAction
+    public var sequentialAction: SequentialPaddleAction
+    public var showFloatingHUD: Bool
+    public var showHUDOnNeutral: Bool
+    public var autoSyncFavorites: Bool
+
+    public init(
+        gearboxMode: GearboxMode = .models,
+        reverseAction: ReverseGearAction = .togglePlanMode,
+        parkTapAction: ParkButtonAction = .parkingBrake,
+        parkHoldAction: ParkButtonAction = .toggleFastMode,
+        parkChordLayer: ModifierLayerAction = .effort,
+        shiftModifierLayer: ModifierLayerAction = .effort,
+        optionModifierLayer: ModifierLayerAction = .permissions,
+        sequentialAction: SequentialPaddleAction = .stepEffort,
+        showFloatingHUD: Bool = true,
+        showHUDOnNeutral: Bool = true,
+        autoSyncFavorites: Bool = false
+    ) {
+        self.gearboxMode = gearboxMode
+        self.reverseAction = reverseAction
+        self.parkTapAction = parkTapAction
+        self.parkHoldAction = parkHoldAction
+        self.parkChordLayer = parkChordLayer
+        self.shiftModifierLayer = shiftModifierLayer
+        self.optionModifierLayer = optionModifierLayer
+        self.sequentialAction = sequentialAction
+        self.showFloatingHUD = showFloatingHUD
+        self.showHUDOnNeutral = showHUDOnNeutral
+        self.autoSyncFavorites = autoSyncFavorites
+    }
+
+    public static let t3Default = TransmissionBindings(
+        gearboxMode: .models,
+        reverseAction: .togglePlanMode,
+        parkTapAction: .parkingBrake,
+        parkHoldAction: .toggleFastMode,
+        parkChordLayer: .effort,
+        shiftModifierLayer: .effort,
+        optionModifierLayer: .permissions,
+        sequentialAction: .stepEffort,
+        showFloatingHUD: true,
+        showHUDOnNeutral: true,
+        autoSyncFavorites: false
+    )
+
+    public static let codexDefault = TransmissionBindings(
+        gearboxMode: .custom,
+        reverseAction: .reviewPreset,
+        parkTapAction: .parkingBrake,
+        parkHoldAction: .toggleFastMode,
+        parkChordLayer: .effort,
+        shiftModifierLayer: .effort,
+        optionModifierLayer: .disabled,
+        sequentialAction: .stepEffort,
+        showFloatingHUD: true,
+        showHUDOnNeutral: true,
+        autoSyncFavorites: false
+    )
+}
+
 public enum TargetSelection: Equatable, Sendable {
     case automatic
     case pinned(String)

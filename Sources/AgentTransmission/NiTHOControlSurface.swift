@@ -14,6 +14,7 @@ final class NiTHOControlSurface: ControlSurface {
     private var buttons: Set<Int> = []
     private var stateMachine = ShifterStateMachine()
     private var settleWorkItem: DispatchWorkItem?
+    private var neutralWorkItem: DispatchWorkItem?
     private var modifierHeld = false
 
     init() {
@@ -52,6 +53,7 @@ final class NiTHOControlSurface: ControlSurface {
 
     func stop() {
         settleWorkItem?.cancel()
+        neutralWorkItem?.cancel()
         IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
         IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
     }
@@ -63,6 +65,7 @@ final class NiTHOControlSurface: ControlSurface {
         let usage = Int(IOHIDElementGetUsage(element))
         guard (1...10).contains(usage) else { return }
 
+        let hadDirectButtons = !buttons.intersection(1...7).isEmpty
         if IOHIDValueGetIntegerValue(value) == 0 {
             buttons.remove(usage)
         } else {
@@ -70,11 +73,21 @@ final class NiTHOControlSurface: ControlSurface {
         }
         sample()
 
-        if !buttons.intersection(1...7).isEmpty {
+        let hasDirectButtons = !buttons.intersection(1...7).isEmpty
+        if hasDirectButtons {
+            neutralWorkItem?.cancel()
+            neutralWorkItem = nil
             settleWorkItem?.cancel()
             let workItem = DispatchWorkItem { [weak self] in self?.sample() }
             settleWorkItem = workItem
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.030, execute: workItem)
+        } else if hadDirectButtons {
+            settleWorkItem?.cancel()
+            settleWorkItem = nil
+            neutralWorkItem?.cancel()
+            let workItem = DispatchWorkItem { [weak self] in self?.sample() }
+            neutralWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + stateMachine.neutralSettleInterval + 0.010, execute: workItem)
         }
     }
 
@@ -87,6 +100,8 @@ final class NiTHOControlSurface: ControlSurface {
             switch event {
             case let .engaged(position):
                 return .selectPosition(position)
+            case .enteredNeutral:
+                return .enteredNeutral
             case let .sequentialStep(direction):
                 return modifierHeld ? .stepModelFamily(direction) : .stepEffort(direction)
             case let .parkingChanged(pressed):

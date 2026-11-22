@@ -1,278 +1,147 @@
 import AppKit
+import SwiftUI
 import AgentTransmissionCore
 
-private final class PresetMenuChoice: NSObject {
-    let position: GearPosition
-    let preset: ModelPreset
-
-    init(position: GearPosition, preset: ModelPreset) {
-        self.position = position
-        self.preset = preset
-    }
-}
-
-final class StatusMenuController: NSObject, NSMenuDelegate {
+final class StatusMenuController: NSObject {
     private let model: AppModel
     private let launchAtLogin = LaunchAtLoginController()
     private let statusItem: NSStatusItem
-    private let menu = NSMenu()
-    private var isMenuOpen = false
-    private weak var statusMenuItem: NSMenuItem?
+    private let popover: NSPopover
+    private var clickOutsideMonitor: Any?
 
     init(model: AppModel) {
         self.model = model
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        popover = NSPopover()
         super.init()
-        statusItem.menu = menu
-        menu.delegate = self
+
+        popover.behavior = .transient
+        popover.animates = true
+        popover.contentSize = NSSize(width: 396, height: 610)
+        popover.contentViewController = NSHostingController(
+            rootView: PopoverAppView(
+                model: model,
+                launchAtLogin: launchAtLogin,
+                onQuit: { NSApplication.shared.terminate(nil) }
+            )
+        )
+
+        if let button = statusItem.button {
+            button.target = self
+            button.action = #selector(handleStatusBarClick(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
+
         model.onChange = { [weak self] in self?.refresh() }
         refresh()
     }
 
-    func menuWillOpen(_ menu: NSMenu) {
-        isMenuOpen = true
-        model.refreshTasks()
-        rebuildMenu()
-    }
-
-    func menuDidClose(_ menu: NSMenu) {
-        isMenuOpen = false
+    deinit {
+        if let clickOutsideMonitor {
+            NSEvent.removeMonitor(clickOutsideMonitor)
+        }
     }
 
     private func refresh() {
-        let gear = model.modifierHeld ? "P…" : (model.parked ? "P" : (model.lastGear?.label ?? "N"))
-        let preset = model.currentPreset.map { " · \($0.name) \($0.effort.shortLabel)" } ?? ""
+        let gear: String
+        if model.modifierHeld {
+            gear = "P…"
+        } else if model.parked {
+            gear = "🅿"
+        } else if model.inNeutral {
+            gear = "N"
+        } else {
+            gear = model.lastGear?.label ?? "N"
+        }
+
+        let liveLabel: String
+        if let preset = model.currentPreset {
+            liveLabel = " · \(preset.name) \(preset.effort.shortLabel)"
+        } else if let live = model.currentThreadState, !live.modelLabel.isEmpty {
+            let eff = live.effort.map { " \($0.shortLabel)" } ?? ""
+            liveLabel = " · \(live.modelLabel)\(eff)"
+        } else {
+            liveLabel = ""
+        }
+
         let speed = model.fastMode ? " · ⚡︎" : ""
-        statusItem.button?.title = "\(gear)\(preset)\(speed)"
+        statusItem.button?.title = "\(gear)\(liveLabel)\(speed)"
         statusItem.button?.toolTip = model.status
-        if isMenuOpen {
-            statusMenuItem?.title = model.status
+    }
+
+    @objc private func handleStatusBarClick(_ sender: AnyObject?) {
+        guard let event = NSApp.currentEvent else {
+            togglePopover()
+            return
+        }
+
+        if event.type == .rightMouseUp {
+            showQuickContextMenu()
+        } else {
+            togglePopover()
         }
     }
 
-    private func rebuildMenu() {
-        menu.removeAllItems()
+    private func togglePopover() {
+        guard let button = statusItem.button else { return }
+        if popover.isShown {
+            closePopover()
+        } else {
+            model.refreshTasks()
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            NSApp.activate(ignoringOtherApps: true)
+            startClickOutsideMonitor()
+        }
+    }
 
-        let status = NSMenuItem(title: model.status, action: nil, keyEquivalent: "")
-        status.isEnabled = false
-        statusMenuItem = status
-        menu.addItem(status)
+    private func closePopover() {
+        popover.performClose(nil)
+        stopClickOutsideMonitor()
+    }
 
-        let hardware = NSMenuItem(
-            title: model.controlSurfaceConnected
-                ? "\(model.controlSurfaceName) connected"
-                : "\(model.controlSurfaceName) disconnected",
-            action: nil,
-            keyEquivalent: ""
-        )
-        hardware.isEnabled = false
-        menu.addItem(hardware)
-        let discovery = NSMenuItem(
-            title: model.targetDiscoveryConnected
-                ? "\(model.agentTargetName) task discovery connected"
-                : "\(model.agentTargetName) task discovery disconnected",
-            action: nil,
-            keyEquivalent: ""
-        )
-        discovery.isEnabled = false
-        menu.addItem(discovery)
-        let experimental = model.agentTargetControlIsExperimental ? " · experimental" : ""
-        let control = NSMenuItem(
-            title: model.targetControlConnected
-                ? "\(model.agentTargetName) control connected\(experimental)"
-                : "\(model.agentTargetName) control disconnected\(experimental)",
-            action: nil,
-            keyEquivalent: ""
-        )
-        control.isEnabled = false
-        menu.addItem(control)
+    private func startClickOutsideMonitor() {
+        stopClickOutsideMonitor()
+        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            guard let self, self.popover.isShown else { return }
+            self.closePopover()
+        }
+    }
+
+    private func stopClickOutsideMonitor() {
+        if let clickOutsideMonitor {
+            NSEvent.removeMonitor(clickOutsideMonitor)
+            self.clickOutsideMonitor = nil
+        }
+    }
+
+    private func showQuickContextMenu() {
+        closePopover()
+        let menu = NSMenu()
+        let openItem = NSMenuItem(title: "Open Agent Transmission", action: #selector(openPopoverFromMenu), keyEquivalent: "")
+        openItem.target = self
+        menu.addItem(openItem)
+
+        let hudItem = NSMenuItem(title: "Preview Decision HUD", action: #selector(previewHUD), keyEquivalent: "")
+        hudItem.target = self
+        menu.addItem(hudItem)
+
         menu.addItem(.separator())
 
-        let park = NSMenuItem(
-            title: model.parked ? "Release parking brake" : "Apply parking brake",
-            action: #selector(toggleParkingBrake),
-            keyEquivalent: "p"
-        )
-        park.target = self
-        menu.addItem(park)
+        let reconnectItem = NSMenuItem(title: "Reconnect", action: #selector(reconnect), keyEquivalent: "r")
+        reconnectItem.target = self
+        menu.addItem(reconnectItem)
 
-        let fast = NSMenuItem(
-            title: "Fast mode · \(model.fastMode ? "On" : "Off")",
-            action: #selector(toggleFastMode),
-            keyEquivalent: "f"
-        )
-        fast.target = self
-        fast.state = model.fastMode ? .on : .off
-        menu.addItem(fast)
+        let quitItem = NSMenuItem(title: "Quit Agent Transmission", action: #selector(quit), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
 
-        if !model.availableTargetKinds.isEmpty {
-            let agentTargetItem = NSMenuItem(
-                title: "Target · \(model.selectedTargetKind?.displayName ?? model.agentTargetName)",
-                action: nil,
-                keyEquivalent: ""
-            )
-            agentTargetItem.submenu = agentTargetMenu()
-            menu.addItem(agentTargetItem)
-        }
-
-        let task = NSMenuItem(title: taskTitle, action: nil, keyEquivalent: "")
-        task.submenu = taskMenu()
-        menu.addItem(task)
-
-        let open = NSMenuItem(title: "Open target task", action: #selector(openTarget), keyEquivalent: "o")
-        open.target = self
-        open.isEnabled = model.targetTask != nil
-        menu.addItem(open)
-
-        menu.addItem(.separator())
-        let mappingHeader = NSMenuItem(title: "Transmission · configure", action: nil, keyEquivalent: "")
-        mappingHeader.isEnabled = false
-        menu.addItem(mappingHeader)
-        for (index, preset) in model.map.forward.enumerated() {
-            let position = GearPosition(rawValue: index + 1)!
-            let item = NSMenuItem(title: "  \(position.label)  \(preset.displayLabel)", action: nil, keyEquivalent: "")
-            item.submenu = presetMenu(for: position, current: preset)
-            menu.addItem(item)
-        }
-        let reverse = model.map.reverse
-        let reverseItem = NSMenuItem(title: "  R  \(reverse.displayLabel)", action: nil, keyEquivalent: "")
-        reverseItem.submenu = presetMenu(for: .reverse, current: reverse)
-        menu.addItem(reverseItem)
-        let restore = NSMenuItem(title: "Restore transmission defaults", action: #selector(restoreDefaults), keyEquivalent: "")
-        restore.target = self
-        restore.isEnabled = !model.isUsingDefaultMap
-        menu.addItem(restore)
-
-        menu.addItem(.separator())
-        let launchAtLoginItem = NSMenuItem(
-            title: launchAtLoginTitle,
-            action: #selector(toggleLaunchAtLogin),
-            keyEquivalent: ""
-        )
-        launchAtLoginItem.target = self
-        switch launchAtLogin.state {
-        case .enabled:
-            launchAtLoginItem.state = .on
-        case .requiresApproval:
-            launchAtLoginItem.state = .mixed
-        case .disabled:
-            launchAtLoginItem.state = .off
-        }
-        menu.addItem(launchAtLoginItem)
-
-        let reconnect = NSMenuItem(title: "Reconnect", action: #selector(reconnect), keyEquivalent: "r")
-        reconnect.target = self
-        menu.addItem(reconnect)
-        let quit = NSMenuItem(title: "Quit Agent Transmission", action: #selector(quit), keyEquivalent: "q")
-        quit.target = self
-        menu.addItem(quit)
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil
     }
 
-    private var taskTitle: String {
-        guard let task = model.targetTask else { return "Task · none" }
-        let mode = model.targetSelection == .automatic ? "Auto" : "Pinned"
-        return "Task · \(mode) · \(task.title)"
-    }
-
-    private var launchAtLoginTitle: String {
-        switch launchAtLogin.state {
-        case .requiresApproval:
-            return "Launch at Login · Approval Required"
-        case .disabled, .enabled:
-            return "Launch at Login"
-        }
-    }
-
-    private func agentTargetMenu() -> NSMenu {
-        let submenu = NSMenu()
-        for kind in model.availableTargetKinds {
-            let item = NSMenuItem(
-                title: kind.displayName,
-                action: #selector(selectAgentTarget(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = kind.rawValue
-            item.state = model.selectedTargetKind == kind ? .on : .off
-            submenu.addItem(item)
-        }
-        return submenu
-    }
-
-    private func taskMenu() -> NSMenu {
-        let submenu = NSMenu()
-        let automatic = NSMenuItem(
-            title: "Auto · focused \(model.agentTargetName) task",
-            action: #selector(selectAutomatic),
-            keyEquivalent: ""
-        )
-        automatic.target = self
-        automatic.state = model.targetSelection == .automatic ? .on : .off
-        submenu.addItem(automatic)
-        submenu.addItem(.separator())
-
-        for task in model.tasks.prefix(12) {
-            let item = NSMenuItem(
-                title: "\(task.title) — \(task.workspace)",
-                action: #selector(selectTask(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = task.id
-            item.state = model.targetSelection == .pinned(task.id) ? .on : .off
-            submenu.addItem(item)
-        }
-        return submenu
-    }
-
-    private func presetMenu(for position: GearPosition, current: ModelPreset) -> NSMenu {
-        let submenu = NSMenu()
-        var previousName: String?
-        for preset in model.supportedPresets {
-            if let previousName, previousName != preset.name { submenu.addItem(.separator()) }
-            previousName = preset.name
-            let item = NSMenuItem(title: preset.displayLabel, action: #selector(selectPreset(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = PresetMenuChoice(position: position, preset: preset)
-            item.state = preset == current ? .on : .off
-            submenu.addItem(item)
-        }
-        return submenu
-    }
-
-    @objc private func toggleParkingBrake() { model.toggleParkingBrake() }
-    @objc private func toggleFastMode() { model.toggleFastMode() }
-    @objc private func toggleLaunchAtLogin() {
-        do {
-            try launchAtLogin.toggle()
-        } catch {
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "Couldn’t update Launch at Login"
-            alert.informativeText = error.localizedDescription
-            alert.runModal()
-        }
-        rebuildMenu()
-    }
-    @objc private func selectAutomatic() { model.selectAutomaticTarget() }
-    @objc private func openTarget() { model.openTarget() }
+    @objc private func openPopoverFromMenu() { togglePopover() }
+    @objc private func previewHUD() { model.previewDecisionHUD() }
     @objc private func reconnect() { model.reconnect() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
-    @objc private func restoreDefaults() { model.restoreDefaultMap() }
-
-    @objc private func selectAgentTarget(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let kind = AgentTargetKind(rawValue: raw) else { return }
-        model.selectAgentTarget(kind)
-    }
-
-    @objc private func selectTask(_ sender: NSMenuItem) {
-        guard let taskID = sender.representedObject as? String else { return }
-        model.pinTarget(taskID)
-    }
-
-    @objc private func selectPreset(_ sender: NSMenuItem) {
-        guard let choice = sender.representedObject as? PresetMenuChoice else { return }
-        model.configure(choice.position, preset: choice.preset)
-    }
 }

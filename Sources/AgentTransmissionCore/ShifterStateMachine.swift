@@ -2,20 +2,24 @@ import Foundation
 
 public enum RawShifterEvent: Equatable, Sendable {
     case engaged(GearPosition)
+    case enteredNeutral
     case sequentialStep(Int)
     case parkingChanged(Bool)
 }
 
 public struct ShifterStateMachine: Sendable {
     public let settleInterval: TimeInterval
+    public let neutralSettleInterval: TimeInterval
 
     private var previousButtons: Set<Int> = []
     private var candidate: GearPosition?
     private var candidateSince: TimeInterval?
+    private var neutralSince: TimeInterval?
     private var lastEmittedDirectPosition: GearPosition?
 
-    public init(settleInterval: TimeInterval = 0.025) {
+    public init(settleInterval: TimeInterval = 0.025, neutralSettleInterval: TimeInterval = 0.100) {
         self.settleInterval = settleInterval
+        self.neutralSettleInterval = neutralSettleInterval
     }
 
     public mutating func sample(
@@ -36,6 +40,22 @@ public struct ShifterStateMachine: Sendable {
             ? directButtons.first.flatMap(GearPosition.init(rawValue:))
             : nil
 
+        if directButtons.isEmpty {
+            if lastEmittedDirectPosition != nil {
+                if let neutralSince {
+                    if timestamp - neutralSince >= neutralSettleInterval {
+                        lastEmittedDirectPosition = nil
+                        self.neutralSince = nil
+                        events.append(.enteredNeutral)
+                    }
+                } else {
+                    neutralSince = timestamp
+                }
+            }
+        } else {
+            neutralSince = nil
+        }
+
         if position != candidate {
             candidate = position
             candidateSince = position == nil ? nil : timestamp
@@ -44,6 +64,7 @@ public struct ShifterStateMachine: Sendable {
                   let candidateSince,
                   timestamp - candidateSince >= settleInterval {
             lastEmittedDirectPosition = position
+            neutralSince = nil
             events.append(.engaged(position))
         }
 

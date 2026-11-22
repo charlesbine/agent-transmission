@@ -14,9 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     )
     private var menuController: StatusMenuController?
+    private var hudController: FloatingHUDController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        hudController = FloatingHUDController(model: model)
         menuController = StatusMenuController(model: model)
         model.start()
     }

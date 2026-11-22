@@ -32,6 +32,7 @@ struct T3CatalogModel: Equatable, Sendable {
     let instanceId: String
     let driver: String
     let providerLabel: String
+    let accentColorHex: String
     let slug: String
     let shortName: String
     let displayName: String
@@ -41,17 +42,53 @@ struct T3CatalogModel: Equatable, Sendable {
     let efforts: [T3EffortOption]
     let fastModeMapping: T3FastModeMapping?
 
+    init(
+        instanceId: String,
+        driver: String,
+        providerLabel: String,
+        accentColorHex: String = "#94A3B8",
+        slug: String,
+        shortName: String,
+        displayName: String,
+        isDefault: Bool,
+        isFavorite: Bool,
+        reasoningOptionID: String?,
+        efforts: [T3EffortOption],
+        fastModeMapping: T3FastModeMapping?
+    ) {
+        self.instanceId = instanceId
+        self.driver = driver
+        self.providerLabel = providerLabel
+        self.accentColorHex = accentColorHex
+        self.slug = slug
+        self.shortName = shortName
+        self.displayName = displayName
+        self.isDefault = isDefault
+        self.isFavorite = isFavorite
+        self.reasoningOptionID = reasoningOptionID
+        self.efforts = efforts
+        self.fastModeMapping = fastModeMapping
+    }
+
     func rawEffortOptionID(for effort: ReasoningEffort) -> String? {
         efforts.first(where: { $0.effort == effort })?.rawOptionID
+    }
+
+    var defaultEffort: ReasoningEffort {
+        if let explicit = efforts.first(where: \.isDefault)?.effort { return explicit }
+        if efforts.contains(where: { $0.effort == .high }) { return .high }
+        return efforts.first?.effort ?? .medium
     }
 }
 
 final class T3CodeAgentTarget: AgentTarget {
     let name = "T3 Code"
     let controlIsExperimental = false
+    let supportsRichControlActions = true
 
     private(set) var supportedPresets: [ModelPreset]
     private(set) var defaultTransmissionMap: TransmissionMap
+    private(set) var catalogModels: [CatalogModelSummary] = []
 
     var onStateChanged: ((AgentTargetState) -> Void)?
     var onTasksChanged: (([AgentTask]) -> Void)?
@@ -118,6 +155,7 @@ final class T3CodeAgentTarget: AgentTarget {
         self.client = client
         let initialCatalog = Self.fallbackModels
         self.orderedModels = initialCatalog
+        self.catalogModels = Self.buildCatalogSummaries(from: initialCatalog)
         self.supportedPresets = Self.buildSupportedPresets(from: initialCatalog)
         self.defaultTransmissionMap = Self.buildDefaultTransmissionMap(from: initialCatalog, favoritesOnly: initialCatalog)
         wireClientCallbacks()
@@ -274,6 +312,124 @@ final class T3CodeAgentTarget: AgentTarget {
         ))
     }
 
+    // MARK: - Rich T3 Code Control Actions & Live Thread State
+
+    func currentThreadState(for taskID: String) -> AgentThreadLiveState? {
+        guard let thread = threadsByID[taskID] else { return nil }
+        let instanceID = thread.modelSelection.instanceId ?? thread.providerInstanceId
+        let slug = thread.modelSelection.model
+        let catalogModel = lookupCatalogModel(instanceId: instanceID, modelSlug: slug)
+        let label = catalogModel?.displayName ?? Self.shortModelLabel(slug: slug, name: nil, shortName: nil)
+
+        var effort: ReasoningEffort?
+        if let reasoningID = catalogModel?.reasoningOptionID,
+           let raw = thread.modelSelection.options?.first(where: { $0.id == reasoningID })?.value.stringValue {
+            effort = Self.mapReasoningEffort(raw)
+        } else if let anyEffort = thread.modelSelection.options?.first(where: {
+            let id = $0.id.lowercased()
+            return id.contains("effort") || id.contains("thought") || id.contains("variant")
+        })?.value.stringValue {
+            effort = Self.mapReasoningEffort(anyEffort)
+        }
+
+        var fastMode: Bool?
+        if let mapping = catalogModel?.fastModeMapping,
+           let opt = thread.modelSelection.options?.first(where: { $0.id == mapping.optionID }) {
+            switch mapping {
+            case .boolean:
+                fastMode = opt.value.boolValue
+            case let .select(_, fastValue, _):
+                fastMode = opt.value.stringValue == fastValue
+            }
+        }
+
+        let interaction = AgentInteractionMode(rawValue: thread.interactionMode ?? "") ?? .defaultMode
+        let runtime = AgentRuntimeMode(rawValue: thread.runtimeMode ?? "") ?? .auto
+        let liveStatuses: Set<String> = ["running", "starting", "preparing", "queued"]
+        let running = thread.activeRunId != nil || liveStatuses.contains(thread.status ?? "")
+
+        return AgentThreadLiveState(
+            threadID: thread.id,
+            modelSlug: slug,
+            providerInstanceID: instanceID.isEmpty ? nil : instanceID,
+            modelLabel: label,
+            effort: effort ?? catalogModel?.defaultEffort,
+            fastMode: fastMode,
+            interactionMode: interaction,
+            runtimeMode: runtime,
+            isRunning: running
+        )
+    }
+
+    func presetForEffortSlot(_ gearIndex: Int, on taskID: String, fallback: ModelPreset?) -> ModelPreset? {
+        guard (1...6).contains(gearIndex) else { return nil }
+        let targetEffort = ReasoningEffort.allCases[gearIndex - 1]
+        let model: T3CatalogModel?
+        if let thread = threadsByID[taskID], !thread.modelSelection.model.isEmpty {
+            let instanceID = thread.modelSelection.instanceId ?? thread.providerInstanceId
+            model = lookupCatalogModel(instanceId: instanceID, modelSlug: thread.modelSelection.model)
+        } else if let fallback {
+            model = lookupCatalogModel(for: fallback)
+        } else {
+            model = orderedModels.first
+        }
+
+        guard let model else {
+            guard let fallback else { return nil }
+            return ModelPreset(name: fallback.name, model: fallback.model, effort: targetEffort, provider: fallback.provider)
+        }
+
+        let efforts = model.efforts.map(\.effort)
+        let chosen: ReasoningEffort
+        if efforts.contains(targetEffort) {
+            chosen = targetEffort
+        } else {
+            let idx = closestEffortIndex(to: targetEffort, in: efforts)
+            chosen = efforts.indices.contains(idx) ? efforts[idx] : model.defaultEffort
+        }
+        return ModelPreset(
+            name: model.displayName,
+            model: model.slug,
+            effort: chosen,
+            provider: model.instanceId
+        )
+    }
+
+    func setInteractionMode(
+        _ mode: AgentInteractionMode,
+        for taskID: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        client.setInteractionMode(threadID: taskID, interactionMode: mode.rawValue, completion: completion)
+    }
+
+    func setRuntimeMode(
+        _ mode: AgentRuntimeMode,
+        for taskID: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        client.setRuntimeMode(threadID: taskID, runtimeMode: mode.rawValue, completion: completion)
+    }
+
+    func interruptRun(
+        for taskID: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard let thread = threadsByID[taskID],
+              let runID = thread.activeRunId, !runID.isEmpty else {
+            completion(.failure(AgentTargetActionError.unsupported("No active run to interrupt")))
+            return
+        }
+        client.interruptRun(threadID: taskID, runID: runID, completion: completion)
+    }
+
+    func settleTask(
+        _ taskID: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        client.settleThread(threadID: taskID, completion: completion)
+    }
+
     // MARK: - Deep Link
 
     func taskURL(for taskID: String) -> URL? {
@@ -391,6 +547,7 @@ final class T3CodeAgentTarget: AgentTarget {
         }
 
         orderedModels = merged
+        catalogModels = Self.buildCatalogSummaries(from: merged)
         supportedPresets = Self.buildSupportedPresets(from: merged)
         defaultTransmissionMap = Self.buildDefaultTransmissionMap(
             from: merged,
@@ -879,6 +1036,50 @@ final class T3CodeAgentTarget: AgentTarget {
         }
     }
 
+    static func providerAccentHex(_ provider: T3ServerProvider) -> String {
+        if let accent = provider.accentColor?.trimmingCharacters(in: .whitespacesAndNewlines), accent.hasPrefix("#") {
+            return accent
+        }
+        let driver = provider.driver.lowercased()
+        let id = provider.instanceId.lowercased()
+        if driver.contains("claude") { return "#E07A5F" }
+        if driver.contains("codex") { return "#10B981" }
+        if id.contains("antigravity") || driver.contains("antigravity") { return "#38BDF8" }
+        if driver.contains("opencode") { return "#A78BFA" }
+        if driver.contains("cursor") { return "#60A5FA" }
+        if driver.contains("grok") { return "#F59E0B" }
+        return "#94A3B8"
+    }
+
+    static func modelTierRank(slug: String, displayName: String) -> Int {
+        let s = "\(slug) \(displayName)".lowercased()
+        // Lower rank = faster/lighter (1st gear); higher rank = heavier/smarter (6th gear).
+        if s.contains("haiku") || s.contains("mini") || s.contains("nano") || s.contains("lite") { return 10 }
+        if s.contains("flash") || s.contains("luna") || s.contains("fast") || s.contains("devstral") { return 20 }
+        if s.contains("carbon") || s.contains("argon") || s.contains("terra") || s.contains("fable") { return 40 }
+        if s.contains("sonnet") || s.contains("hydrogen") || s.contains("deepseek") { return 55 }
+        if s.contains("astra") || s.contains("neon") || s.contains("2.5-pro") || s.contains("orchestrator") { return 75 }
+        if s.contains("opus") || s.contains("sol") || s.contains("ultra") { return 95 }
+        return 50
+    }
+
+    static func buildCatalogSummaries(from catalog: [T3CatalogModel]) -> [CatalogModelSummary] {
+        catalog.map { model in
+            CatalogModelSummary(
+                providerInstanceID: model.instanceId,
+                providerLabel: model.providerLabel,
+                accentColorHex: model.accentColorHex,
+                slug: model.slug,
+                displayName: model.displayName,
+                isFavorite: model.isFavorite,
+                supportedEfforts: model.efforts.map(\.effort),
+                defaultEffort: model.defaultEffort,
+                supportsFastMode: model.fastModeMapping != nil,
+                tierRank: modelTierRank(slug: model.slug, displayName: model.displayName)
+            )
+        }
+    }
+
     static func extractFullCatalog(
         providers: [T3ServerProvider],
         favorites: [T3ModelFavorite],
@@ -889,6 +1090,7 @@ final class T3CodeAgentTarget: AgentTarget {
             instanceId: String,
             driver: String,
             providerLabel: String,
+            accentColorHex: String,
             slug: String,
             shortName: String,
             isDefault: Bool,
@@ -901,6 +1103,7 @@ final class T3CodeAgentTarget: AgentTarget {
         for provider in providers {
             guard provider.enabled, provider.status == "ready", !provider.models.isEmpty else { continue }
             let providerLabel = providerDisplayLabel(provider)
+            let accentHex = providerAccentHex(provider)
             let pref = preferences[provider.instanceId]
             let hidden = Set(pref?.hiddenModels ?? [])
             var orderIndex: [String: Int] = [:]
@@ -948,6 +1151,7 @@ final class T3CodeAgentTarget: AgentTarget {
                     instanceId: provider.instanceId,
                     driver: provider.driver,
                     providerLabel: providerLabel,
+                    accentColorHex: accentHex,
                     slug: model.slug,
                     shortName: shortName,
                     isDefault: model.isDefault == true,
@@ -973,6 +1177,7 @@ final class T3CodeAgentTarget: AgentTarget {
                 instanceId: entry.instanceId,
                 driver: entry.driver,
                 providerLabel: entry.providerLabel,
+                accentColorHex: entry.accentColorHex,
                 slug: entry.slug,
                 shortName: entry.shortName,
                 displayName: displayName,
