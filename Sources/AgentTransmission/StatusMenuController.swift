@@ -16,6 +16,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private let launchAtLogin = LaunchAtLoginController()
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
+    private var isMenuOpen = false
+    private weak var statusMenuItem: NSMenuItem?
 
     init(model: AppModel) {
         self.model = model
@@ -28,8 +30,13 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        isMenuOpen = true
         model.refreshTasks()
         rebuildMenu()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        isMenuOpen = false
     }
 
     private func refresh() {
@@ -38,7 +45,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let speed = model.fastMode ? " · ⚡︎" : ""
         statusItem.button?.title = "\(gear)\(preset)\(speed)"
         statusItem.button?.toolTip = model.status
-        rebuildMenu()
+        if isMenuOpen {
+            statusMenuItem?.title = model.status
+        }
     }
 
     private func rebuildMenu() {
@@ -46,6 +55,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
         let status = NSMenuItem(title: model.status, action: nil, keyEquivalent: "")
         status.isEnabled = false
+        statusMenuItem = status
         menu.addItem(status)
 
         let hardware = NSMenuItem(

@@ -68,6 +68,7 @@ final class T3CodeAgentTarget: AgentTarget {
     private var projectsByID: [String: T3ProjectShell] = [:]
     private var threadsByID: [String: T3ThreadShell] = [:]
     private var lastAppOpenedThreadID: String?
+    private var lastEmittedTasks: [AgentTask] = []
 
     private var providers: [T3ServerProvider] = []
     private var favorites: [T3ModelFavorite] = []
@@ -303,6 +304,9 @@ final class T3CodeAgentTarget: AgentTarget {
         client.onSettingsUpdated = { [weak self] settings in
             self?.applySettingsUpdated(settings)
         }
+        client.onShellBatch = { [weak self] events in
+            self?.applyShellBatch(events)
+        }
         client.onShellSnapshot = { [weak self] projects, threads, isEnrichmentOnly in
             self?.applyShellSnapshot(projects: projects, threads: threads, isEnrichmentOnly: isEnrichmentOnly)
         }
@@ -397,12 +401,54 @@ final class T3CodeAgentTarget: AgentTarget {
 
     // MARK: - Shell State & Focus Tracking (Matches t3-stream-deck/src/store.ts)
 
+    func applyShellBatch(_ events: [T3ShellEvent]) {
+        guard !events.isEmpty else { return }
+        let previousFocus = focusedThreadID
+        var forceEmitFocus = false
+
+        for event in events {
+            switch event {
+            case let .snapshot(projects, threads, isEnrichmentOnly):
+                mutateForShellSnapshot(projects: projects, threads: threads, isEnrichmentOnly: isEnrichmentOnly)
+                if !isEnrichmentOnly && focusedThreadID != nil {
+                    forceEmitFocus = true
+                }
+            case let .projectUpdated(project):
+                if project.deletedAt != nil {
+                    projectsByID.removeValue(forKey: project.id)
+                } else {
+                    projectsByID[project.id] = project
+                }
+            case let .projectRemoved(projectID):
+                projectsByID.removeValue(forKey: projectID)
+            case let .threadUpdated(thread, location):
+                mutateForThreadUpdated(thread, location: location)
+            case let .threadRemoved(threadID, _):
+                threadsByID.removeValue(forKey: threadID)
+            }
+        }
+
+        ensureValidFocus()
+        emitTasks()
+        if focusedThreadID != previousFocus || forceEmitFocus {
+            onFocusedTaskChanged?(focusedThreadID)
+        }
+    }
+
     func applyShellSnapshot(projects: [T3ProjectShell], threads: [T3ThreadShell], isEnrichmentOnly: Bool) {
+        let previousFocus = focusedThreadID
+        mutateForShellSnapshot(projects: projects, threads: threads, isEnrichmentOnly: isEnrichmentOnly)
+        emitTasks()
+        if !isEnrichmentOnly, focusedThreadID != previousFocus || focusedThreadID != nil {
+            onFocusedTaskChanged?(focusedThreadID)
+        }
+    }
+
+    private func mutateForShellSnapshot(projects: [T3ProjectShell], threads: [T3ThreadShell], isEnrichmentOnly: Bool) {
         if isEnrichmentOnly {
             for project in projects where project.deletedAt == nil {
                 projectsByID[project.id] = project
             }
-            emitTasks()
             return
         }
 
@@ -416,17 +462,11 @@ final class T3CodeAgentTarget: AgentTarget {
             threadsByID[thread.id] = thread
         }
 
-        let previousFocus = focusedThreadID
         if let mostRecent = findMostRecentlyVisitedThread() {
             focusedThreadID = mostRecent.id
             lastAppOpenedThreadID = mostRecent.id
         } else {
             ensureValidFocus()
-        }
-
-        emitTasks()
-        if focusedThreadID != previousFocus || focusedThreadID != nil {
-            onFocusedTaskChanged?(focusedThreadID)
         }
     }
 
@@ -445,8 +485,17 @@ final class T3CodeAgentTarget: AgentTarget {
     }
 
     func applyThreadUpdated(_ thread: T3ThreadShell, location: String) {
-        let prev = threadsByID[thread.id]
         let previousFocus = focusedThreadID
+        mutateForThreadUpdated(thread, location: location)
+        ensureValidFocus()
+        emitTasks()
+        if focusedThreadID != previousFocus {
+            onFocusedTaskChanged?(focusedThreadID)
+        }
+    }
+
+    private func mutateForThreadUpdated(_ thread: T3ThreadShell, location: String) {
+        let prev = threadsByID[thread.id]
 
         if location == "archive" || thread.deletedAt != nil || thread.archivedAt != nil {
             threadsByID.removeValue(forKey: thread.id)
@@ -470,12 +519,6 @@ final class T3CodeAgentTarget: AgentTarget {
                     focusedThreadID = thread.id
                 }
             }
-        }
-
-        ensureValidFocus()
-        emitTasks()
-        if focusedThreadID != previousFocus {
-            onFocusedTaskChanged?(focusedThreadID)
         }
     }
 
@@ -525,21 +568,39 @@ final class T3CodeAgentTarget: AgentTarget {
     }
 
     private func emitTasks() {
-        let topLevel = threadsByID.values
-            .filter { $0.deletedAt == nil && $0.archivedAt == nil && $0.lineage?.parentThreadId == nil }
-            .sorted(by: Self.compareThreads)
+        var ranked: [(thread: T3ThreadShell, visitMs: Int64, updatedMs: Int64)] = []
+        ranked.reserveCapacity(threadsByID.count)
+        for thread in threadsByID.values {
+            guard thread.deletedAt == nil, thread.archivedAt == nil, thread.lineage?.parentThreadId == nil else {
+                continue
+            }
+            ranked.append((
+                thread: thread,
+                visitMs: Self.threadVisitTimestamp(thread),
+                updatedMs: Self.parseISO8601Millis(thread.updatedAt)
+            ))
+        }
 
-        let tasks = topLevel.map { thread -> AgentTask in
-            let title = thread.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            let workspace = projectsByID[thread.projectId]?.title ?? "T3 Code"
-            let tsMs = max(Self.threadVisitTimestamp(thread), Self.parseISO8601Millis(thread.updatedAt))
+        ranked.sort { lhs, rhs in
+            if lhs.visitMs != rhs.visitMs { return lhs.visitMs > rhs.visitMs }
+            if lhs.updatedMs != rhs.updatedMs { return lhs.updatedMs > rhs.updatedMs }
+            return lhs.thread.id < rhs.thread.id
+        }
+
+        let tasks = ranked.map { entry -> AgentTask in
+            let title = entry.thread.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let workspace = projectsByID[entry.thread.projectId]?.title ?? "T3 Code"
+            let tsMs = max(entry.visitMs, entry.updatedMs)
             return AgentTask(
-                id: thread.id,
+                id: entry.thread.id,
                 title: title.isEmpty ? "Untitled" : title,
                 workspace: workspace,
                 updatedAt: Int(tsMs / 1000)
             )
         }
+
+        guard tasks != lastEmittedTasks else { return }
+        lastEmittedTasks = tasks
         onTasksChanged?(tasks)
     }
 
@@ -605,19 +666,90 @@ final class T3CodeAgentTarget: AgentTarget {
         return max(openedAt, visitedAt)
     }
 
+    /// Zero-allocation RFC3339 / ISO-8601 timestamp parser (YYYY-MM-DDTHH:MM:SS[.fff][Z|±HH:MM]).
+    /// Avoids ICU `ISO8601DateFormatter` allocation inside thread-list sorting hot paths.
     static func parseISO8601Millis(_ string: String?) -> Int64 {
-        guard let string, !string.isEmpty else { return 0 }
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = fractional.date(from: string) {
-            return Int64(date.timeIntervalSince1970 * 1000)
+        guard let string, string.utf8.count >= 19 else { return 0 }
+        let bytes = Array(string.utf8)
+        let count = bytes.count
+
+        @inline(__always)
+        func digit(_ index: Int) -> Int64? {
+            guard index < count else { return nil }
+            let b = bytes[index]
+            guard b >= 48 && b <= 57 else { return nil }
+            return Int64(b - 48)
         }
-        let standard = ISO8601DateFormatter()
-        standard.formatOptions = [.withInternetDateTime]
-        if let date = standard.date(from: string) {
-            return Int64(date.timeIntervalSince1970 * 1000)
+
+        @inline(__always)
+        func twoDigits(_ start: Int) -> Int64? {
+            guard let a = digit(start), let b = digit(start + 1) else { return nil }
+            return a * 10 + b
         }
-        return 0
+
+        guard let y1 = digit(0), let y2 = digit(1), let y3 = digit(2), let y4 = digit(3),
+              bytes[4] == 45, // '-'
+              let month = twoDigits(5),
+              bytes[7] == 45, // '-'
+              let day = twoDigits(8),
+              (bytes[10] == 84 || bytes[10] == 116 || bytes[10] == 32), // 'T', 't', ' '
+              let hour = twoDigits(11),
+              bytes[13] == 58, // ':'
+              let minute = twoDigits(14),
+              bytes[16] == 58, // ':'
+              let second = twoDigits(17) else {
+            return 0
+        }
+
+        let year = y1 * 1000 + y2 * 100 + y3 * 10 + y4
+        guard month >= 1 && month <= 12,
+              day >= 1 && day <= 31,
+              hour <= 23, minute <= 59, second <= 60 else {
+            return 0
+        }
+
+        var idx = 19
+        var millis: Int64 = 0
+        if idx < count && bytes[idx] == 46 { // '.'
+            idx += 1
+            var scale: Int64 = 100
+            while idx < count, let d = digit(idx) {
+                if scale > 0 {
+                    millis += d * scale
+                    scale /= 10
+                }
+                idx += 1
+            }
+        }
+
+        var tzOffsetSeconds: Int64 = 0
+        if idx < count {
+            let tz = bytes[idx]
+            if tz == 90 || tz == 122 { // 'Z' or 'z'
+                tzOffsetSeconds = 0
+            } else if tz == 43 || tz == 45 { // '+' or '-'
+                let sign: Int64 = tz == 43 ? 1 : -1
+                idx += 1
+                if let tzH = twoDigits(idx) {
+                    idx += 2
+                    if idx < count && bytes[idx] == 58 { idx += 1 }
+                    let tzM = twoDigits(idx) ?? 0
+                    tzOffsetSeconds = sign * (tzH * 3600 + tzM * 60)
+                }
+            }
+        }
+
+        // Howard Hinnant's civil-to-days algorithm (days since 1970-01-01).
+        let adjYear = month <= 2 ? year - 1 : year
+        let era = (adjYear >= 0 ? adjYear : adjYear - 399) / 400
+        let yoe = adjYear - era * 400
+        let adjMonth = month > 2 ? month - 3 : month + 9
+        let doy = (153 * adjMonth + 2) / 5 + day - 1
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+        let days = era * 146097 + doe - 719468
+
+        let totalSeconds = days * 86400 + hour * 3600 + minute * 60 + second - tzOffsetSeconds
+        return totalSeconds * 1000 + millis
     }
 
     static func compareThreads(_ lhs: T3ThreadShell, _ rhs: T3ThreadShell) -> Bool {

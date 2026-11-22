@@ -1,5 +1,8 @@
 import Darwin
 import Foundation
+import os
+
+private let t3Log = Logger(subsystem: "com.metaember.agent-transmission", category: "T3Code")
 
 // MARK: - Protocol Models
 
@@ -20,9 +23,15 @@ struct T3StoredSession: Codable, Equatable, Sendable {
 enum T3OptionValue: Codable, Equatable, Sendable {
     case string(String)
     case bool(Bool)
+    case number(Double)
+    case null
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+            return
+        }
         if let boolValue = try? container.decode(Bool.self) {
             self = .bool(boolValue)
             return
@@ -31,10 +40,12 @@ enum T3OptionValue: Codable, Equatable, Sendable {
             self = .string(stringValue)
             return
         }
-        throw DecodingError.typeMismatch(
-            T3OptionValue.self,
-            .init(codingPath: decoder.codingPath, debugDescription: "Expected String or Bool option value")
-        )
+        if let numberValue = try? container.decode(Double.self) {
+            self = .number(numberValue)
+            return
+        }
+        // Tolerate unknown/complex option values without failing the parent payload.
+        self = .null
     }
 
     func encode(to encoder: Encoder) throws {
@@ -44,6 +55,10 @@ enum T3OptionValue: Codable, Equatable, Sendable {
             try container.encode(value)
         case let .bool(value):
             try container.encode(value)
+        case let .number(value):
+            try container.encode(value)
+        case .null:
+            try container.encodeNil()
         }
     }
 
@@ -51,6 +66,8 @@ enum T3OptionValue: Codable, Equatable, Sendable {
         switch self {
         case let .string(value): value
         case let .bool(value): value
+        case let .number(value): value
+        case .null: NSNull()
         }
     }
 
@@ -99,13 +116,14 @@ struct T3ModelSelection: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         instanceId = try container.decodeIfPresent(String.self, forKey: .instanceId)
         provider = try container.decodeIfPresent(String.self, forKey: .provider)
-        model = try container.decode(String.self, forKey: .model)
+        model = (try? container.decode(String.self, forKey: .model)) ?? ""
 
         if let list = try? container.decodeIfPresent([T3ProviderOptionSelection].self, forKey: .options) {
-            options = list
+            options = list.filter { $0.value != .null }
         } else if let dict = try? container.decodeIfPresent([String: T3OptionValue].self, forKey: .options) {
             options = dict.keys.sorted().compactMap { key in
-                dict[key].map { T3ProviderOptionSelection(id: key, value: $0) }
+                guard let val = dict[key], val != .null else { return nil }
+                return T3ProviderOptionSelection(id: key, value: val)
             }
         } else {
             options = nil
@@ -138,6 +156,21 @@ struct T3ProviderOptionChoice: Codable, Equatable, Sendable {
     let label: String
     let description: String?
     let isDefault: Bool?
+
+    init(id: String, label: String, description: String? = nil, isDefault: Bool? = nil) {
+        self.id = id
+        self.label = label
+        self.description = description
+        self.isDefault = isDefault
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        label = (try? container.decodeIfPresent(String.self, forKey: .label)) ?? id
+        description = try? container.decodeIfPresent(String.self, forKey: .description)
+        isDefault = try? container.decodeIfPresent(Bool.self, forKey: .isDefault)
+    }
 }
 
 struct T3ProviderOptionDescriptor: Codable, Equatable, Sendable {
@@ -148,6 +181,35 @@ struct T3ProviderOptionDescriptor: Codable, Equatable, Sendable {
     let options: [T3ProviderOptionChoice]?
     let currentValue: T3OptionValue?
     let role: String?
+
+    init(
+        id: String,
+        label: String,
+        description: String? = nil,
+        type: String,
+        options: [T3ProviderOptionChoice]? = nil,
+        currentValue: T3OptionValue? = nil,
+        role: String? = nil
+    ) {
+        self.id = id
+        self.label = label
+        self.description = description
+        self.type = type
+        self.options = options
+        self.currentValue = currentValue
+        self.role = role
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        label = (try? container.decodeIfPresent(String.self, forKey: .label)) ?? id
+        description = try? container.decodeIfPresent(String.self, forKey: .description)
+        type = (try? container.decodeIfPresent(String.self, forKey: .type)) ?? "select"
+        options = try? container.decodeIfPresent([T3ProviderOptionChoice].self, forKey: .options)
+        currentValue = try? container.decodeIfPresent(T3OptionValue.self, forKey: .currentValue)
+        role = try? container.decodeIfPresent(String.self, forKey: .role)
+    }
 }
 
 struct T3ModelCapabilities: Codable, Equatable, Sendable {
@@ -163,6 +225,38 @@ struct T3ServerProviderModel: Codable, Equatable, Sendable {
     let isDefault: Bool?
     let isLegacy: Bool?
     let capabilities: T3ModelCapabilities?
+
+    init(
+        slug: String,
+        name: String,
+        shortName: String? = nil,
+        subProvider: String? = nil,
+        isCustom: Bool? = nil,
+        isDefault: Bool? = nil,
+        isLegacy: Bool? = nil,
+        capabilities: T3ModelCapabilities? = nil
+    ) {
+        self.slug = slug
+        self.name = name
+        self.shortName = shortName
+        self.subProvider = subProvider
+        self.isCustom = isCustom
+        self.isDefault = isDefault
+        self.isLegacy = isLegacy
+        self.capabilities = capabilities
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        slug = try container.decode(String.self, forKey: .slug)
+        name = (try? container.decodeIfPresent(String.self, forKey: .name)) ?? slug
+        shortName = try? container.decodeIfPresent(String.self, forKey: .shortName)
+        subProvider = try? container.decodeIfPresent(String.self, forKey: .subProvider)
+        isCustom = try? container.decodeIfPresent(Bool.self, forKey: .isCustom)
+        isDefault = try? container.decodeIfPresent(Bool.self, forKey: .isDefault)
+        isLegacy = try? container.decodeIfPresent(Bool.self, forKey: .isLegacy)
+        capabilities = try? container.decodeIfPresent(T3ModelCapabilities.self, forKey: .capabilities)
+    }
 }
 
 struct T3ServerProvider: Codable, Equatable, Sendable {
@@ -175,6 +269,41 @@ struct T3ServerProvider: Codable, Equatable, Sendable {
     let installed: Bool?
     let status: String
     let models: [T3ServerProviderModel]
+
+    init(
+        instanceId: String,
+        driver: String,
+        displayName: String? = nil,
+        accentColor: String? = nil,
+        badgeLabel: String? = nil,
+        enabled: Bool,
+        installed: Bool? = nil,
+        status: String,
+        models: [T3ServerProviderModel]
+    ) {
+        self.instanceId = instanceId
+        self.driver = driver
+        self.displayName = displayName
+        self.accentColor = accentColor
+        self.badgeLabel = badgeLabel
+        self.enabled = enabled
+        self.installed = installed
+        self.status = status
+        self.models = models
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        instanceId = try container.decode(String.self, forKey: .instanceId)
+        driver = (try? container.decodeIfPresent(String.self, forKey: .driver)) ?? instanceId
+        displayName = try? container.decodeIfPresent(String.self, forKey: .displayName)
+        accentColor = try? container.decodeIfPresent(String.self, forKey: .accentColor)
+        badgeLabel = try? container.decodeIfPresent(String.self, forKey: .badgeLabel)
+        enabled = (try? container.decodeIfPresent(Bool.self, forKey: .enabled)) ?? true
+        installed = try? container.decodeIfPresent(Bool.self, forKey: .installed)
+        status = (try? container.decodeIfPresent(String.self, forKey: .status)) ?? "ready"
+        models = (try? container.decodeIfPresent([T3ServerProviderModel].self, forKey: .models)) ?? []
+    }
 }
 
 struct T3ModelFavorite: Codable, Equatable, Sendable {
@@ -210,6 +339,32 @@ struct T3ProjectShell: Codable, Equatable, Sendable {
     let pinnedAt: String?
     let archivedAt: String?
     let deletedAt: String?
+
+    init(
+        id: String,
+        title: String,
+        workspaceRoot: String? = nil,
+        pinnedAt: String? = nil,
+        archivedAt: String? = nil,
+        deletedAt: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.workspaceRoot = workspaceRoot
+        self.pinnedAt = pinnedAt
+        self.archivedAt = archivedAt
+        self.deletedAt = deletedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = (try? container.decodeIfPresent(String.self, forKey: .title)) ?? ""
+        workspaceRoot = try? container.decodeIfPresent(String.self, forKey: .workspaceRoot)
+        pinnedAt = try? container.decodeIfPresent(String.self, forKey: .pinnedAt)
+        archivedAt = try? container.decodeIfPresent(String.self, forKey: .archivedAt)
+        deletedAt = try? container.decodeIfPresent(String.self, forKey: .deletedAt)
+    }
 }
 
 struct T3ThreadOpens: Codable, Equatable, Sendable {
@@ -242,6 +397,80 @@ struct T3ThreadShell: Codable, Equatable, Sendable {
     let lastVisitedAt: String?
     let opens: T3ThreadOpens?
     let deletedAt: String?
+
+    init(
+        id: String,
+        projectId: String,
+        title: String,
+        providerInstanceId: String,
+        modelSelection: T3ModelSelection,
+        status: String? = nil,
+        activeRunId: String? = nil,
+        latestRunId: String? = nil,
+        lineage: T3ThreadLineage? = nil,
+        createdAt: String? = nil,
+        updatedAt: String,
+        archivedAt: String? = nil,
+        settledOverride: String? = nil,
+        settledAt: String? = nil,
+        snoozedUntil: String? = nil,
+        pinnedAt: String? = nil,
+        lastVisitedAt: String? = nil,
+        opens: T3ThreadOpens? = nil,
+        deletedAt: String? = nil
+    ) {
+        self.id = id
+        self.projectId = projectId
+        self.title = title
+        self.providerInstanceId = providerInstanceId
+        self.modelSelection = modelSelection
+        self.status = status
+        self.activeRunId = activeRunId
+        self.latestRunId = latestRunId
+        self.lineage = lineage
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.archivedAt = archivedAt
+        self.settledOverride = settledOverride
+        self.settledAt = settledAt
+        self.snoozedUntil = snoozedUntil
+        self.pinnedAt = pinnedAt
+        self.lastVisitedAt = lastVisitedAt
+        self.opens = opens
+        self.deletedAt = deletedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        projectId = (try? container.decodeIfPresent(String.self, forKey: .projectId)) ?? ""
+        title = (try? container.decodeIfPresent(String.self, forKey: .title)) ?? ""
+        providerInstanceId = (try? container.decodeIfPresent(String.self, forKey: .providerInstanceId)) ?? ""
+        modelSelection = (try? container.decodeIfPresent(T3ModelSelection.self, forKey: .modelSelection))
+            ?? T3ModelSelection(instanceId: nil, model: "")
+        status = try? container.decodeIfPresent(String.self, forKey: .status)
+        activeRunId = try? container.decodeIfPresent(String.self, forKey: .activeRunId)
+        latestRunId = try? container.decodeIfPresent(String.self, forKey: .latestRunId)
+        lineage = try? container.decodeIfPresent(T3ThreadLineage.self, forKey: .lineage)
+        createdAt = try? container.decodeIfPresent(String.self, forKey: .createdAt)
+        updatedAt = (try? container.decodeIfPresent(String.self, forKey: .updatedAt)) ?? ""
+        archivedAt = try? container.decodeIfPresent(String.self, forKey: .archivedAt)
+        settledOverride = try? container.decodeIfPresent(String.self, forKey: .settledOverride)
+        settledAt = try? container.decodeIfPresent(String.self, forKey: .settledAt)
+        snoozedUntil = try? container.decodeIfPresent(String.self, forKey: .snoozedUntil)
+        pinnedAt = try? container.decodeIfPresent(String.self, forKey: .pinnedAt)
+        lastVisitedAt = try? container.decodeIfPresent(String.self, forKey: .lastVisitedAt)
+        opens = try? container.decodeIfPresent(T3ThreadOpens.self, forKey: .opens)
+        deletedAt = try? container.decodeIfPresent(String.self, forKey: .deletedAt)
+    }
+}
+
+enum T3ShellEvent: Equatable, Sendable {
+    case snapshot(projects: [T3ProjectShell], threads: [T3ThreadShell], isEnrichmentOnly: Bool)
+    case projectUpdated(T3ProjectShell)
+    case projectRemoved(String)
+    case threadUpdated(T3ThreadShell, location: String)
+    case threadRemoved(String, location: String)
 }
 
 enum T3ConnectionState: Equatable, Sendable {
@@ -297,6 +526,7 @@ protocol T3CodeClientProtocol: AnyObject {
     var onConfigSnapshot: ((T3ServerConfigPayload) -> Void)? { get set }
     var onProvidersUpdated: (([T3ServerProvider]) -> Void)? { get set }
     var onSettingsUpdated: ((T3ServerSettingsPayload) -> Void)? { get set }
+    var onShellBatch: (([T3ShellEvent]) -> Void)? { get set }
     var onShellSnapshot: (([T3ProjectShell], [T3ThreadShell], Bool) -> Void)? { get set }
     var onProjectUpdated: ((T3ProjectShell) -> Void)? { get set }
     var onProjectRemoved: ((String) -> Void)? { get set }
@@ -312,6 +542,13 @@ protocol T3CodeClientProtocol: AnyObject {
         selection: T3ModelSelection,
         completion: @escaping (Result<Void, Error>) -> Void
     )
+}
+
+extension T3CodeClientProtocol {
+    var onShellBatch: (([T3ShellEvent]) -> Void)? {
+        get { nil }
+        set {}
+    }
 }
 
 // MARK: - Weak URLSession Delegate Proxy
@@ -360,6 +597,7 @@ final class T3CodeClient: T3CodeClientProtocol {
     var onConfigSnapshot: ((T3ServerConfigPayload) -> Void)?
     var onProvidersUpdated: (([T3ServerProvider]) -> Void)?
     var onSettingsUpdated: ((T3ServerSettingsPayload) -> Void)?
+    var onShellBatch: (([T3ShellEvent]) -> Void)?
     var onShellSnapshot: (([T3ProjectShell], [T3ThreadShell], Bool) -> Void)?
     var onProjectUpdated: ((T3ProjectShell) -> Void)?
     var onProjectRemoved: ((String) -> Void)?
@@ -541,7 +779,14 @@ final class T3CodeClient: T3CodeClientProtocol {
             threadID: threadID,
             selection: selection
         )
+        t3Log.info("Dispatching thread.model-selection.set thread=\(threadID, privacy: .public) instance=\(selection.instanceId ?? "nil", privacy: .public) model=\(selection.model, privacy: .public) options=\(selection.options?.count ?? 0)")
         callRpc(tag: "orchestration.dispatchCommand", payload: command) { [weak self] result in
+            switch result {
+            case .success:
+                t3Log.info("thread.model-selection.set succeeded thread=\(threadID, privacy: .public) model=\(selection.model, privacy: .public)")
+            case let .failure(error):
+                t3Log.error("thread.model-selection.set failed thread=\(threadID, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
             let mapped: Result<Void, Error> = result.map { _ in () }
             self?.deliver { completion(mapped) }
         }
@@ -939,11 +1184,18 @@ final class T3CodeClient: T3CodeClientProtocol {
 
     private func fetchInitialConfigLocked() {
         callRpcLocked(tag: "server.getConfig", payload: [:]) { [weak self] result in
-            guard let self, case let .success(raw) = result, let raw,
-                  let config: T3ServerConfigPayload = Self.decodeJSONValue(raw) else {
-                return
+            guard let self else { return }
+            switch result {
+            case let .success(raw):
+                guard let raw, let config = Self.decodeConfigPayload(raw) else {
+                    t3Log.error("Failed to decode server.getConfig payload")
+                    return
+                }
+                t3Log.info("Loaded server.getConfig: providers=\(config.providers?.count ?? 0) favorites=\(config.settings?.favorites?.count ?? 0)")
+                self.deliver { [weak self] in self?.onConfigSnapshot?(config) }
+            case let .failure(error):
+                t3Log.error("server.getConfig RPC failed: \(error.localizedDescription, privacy: .public)")
             }
-            self.deliver { [weak self] in self?.onConfigSnapshot?(config) }
         }
     }
 
@@ -956,13 +1208,15 @@ final class T3CodeClient: T3CodeClientProtocol {
             switch type {
             case "snapshot":
                 if let configRaw = payload["config"],
-                   let config: T3ServerConfigPayload = Self.decodeJSONValue(configRaw) {
+                   let config = Self.decodeConfigPayload(configRaw) {
                     deliver { [weak self] in self?.onConfigSnapshot?(config) }
                 }
             case "providerStatuses":
-                if let providersRaw = payload["providers"],
-                   let providers: [T3ServerProvider] = Self.decodeJSONValue(providersRaw) {
-                    deliver { [weak self] in self?.onProvidersUpdated?(providers) }
+                if let providersRaw = payload["providers"] {
+                    let providers: [T3ServerProvider] = Self.decodeJSONArray(providersRaw)
+                    if !providers.isEmpty {
+                        deliver { [weak self] in self?.onProvidersUpdated?(providers) }
+                    }
                 }
             case "settingsUpdated":
                 if let settingsRaw = payload["settings"],
@@ -976,50 +1230,76 @@ final class T3CodeClient: T3CodeClientProtocol {
     }
 
     private func handleShellStreamValues(_ values: [Any]) {
+        var events: [T3ShellEvent] = []
+        events.reserveCapacity(values.count)
+
         for raw in values {
             guard let item = raw as? JSON, let kind = item["kind"] as? String else { continue }
 
             switch kind {
             case "snapshot":
                 guard let snapshot = item["snapshot"] as? JSON else { continue }
-                let projects: [T3ProjectShell] = snapshot["projects"].flatMap(Self.decodeJSONValue) ?? []
-                let threads: [T3ThreadShell] = snapshot["threads"].flatMap(Self.decodeJSONValue) ?? []
+                let projects: [T3ProjectShell] = snapshot["projects"].map(Self.decodeJSONArray) ?? []
+                let threads: [T3ThreadShell] = snapshot["threads"].map(Self.decodeJSONArray) ?? []
                 let isEnrichmentOnly: Bool
                 if let roots = item["resolvedRepositoryIdentityRoots"], !(roots is NSNull) {
                     isEnrichmentOnly = true
                 } else {
                     isEnrichmentOnly = false
                 }
-                deliver { [weak self] in
-                    self?.onShellSnapshot?(projects, threads, isEnrichmentOnly)
-                }
+                t3Log.info("Shell snapshot: projects=\(projects.count) threads=\(threads.count) enrichmentOnly=\(isEnrichmentOnly)")
+                events.append(.snapshot(projects: projects, threads: threads, isEnrichmentOnly: isEnrichmentOnly))
 
             case "project.updated":
                 if let projectRaw = item["project"],
                    let project: T3ProjectShell = Self.decodeJSONValue(projectRaw) {
-                    deliver { [weak self] in self?.onProjectUpdated?(project) }
+                    events.append(.projectUpdated(project))
                 }
 
             case "project.removed":
                 if let projectID = item["projectId"] as? String {
-                    deliver { [weak self] in self?.onProjectRemoved?(projectID) }
+                    events.append(.projectRemoved(projectID))
                 }
 
             case "thread.updated":
                 if let threadRaw = item["thread"],
                    let thread: T3ThreadShell = Self.decodeJSONValue(threadRaw) {
                     let location = item["location"] as? String ?? "active"
-                    deliver { [weak self] in self?.onThreadUpdated?(thread, location) }
+                    events.append(.threadUpdated(thread, location: location))
                 }
 
             case "thread.removed":
                 if let threadID = item["threadId"] as? String {
                     let location = item["location"] as? String ?? "active"
-                    deliver { [weak self] in self?.onThreadRemoved?(threadID, location) }
+                    events.append(.threadRemoved(threadID, location: location))
                 }
 
             default:
                 break
+            }
+        }
+
+        guard !events.isEmpty else { return }
+
+        deliver { [weak self] in
+            guard let self else { return }
+            if let onShellBatch = self.onShellBatch {
+                onShellBatch(events)
+                return
+            }
+            for event in events {
+                switch event {
+                case let .snapshot(projects, threads, isEnrichmentOnly):
+                    self.onShellSnapshot?(projects, threads, isEnrichmentOnly)
+                case let .projectUpdated(project):
+                    self.onProjectUpdated?(project)
+                case let .projectRemoved(projectID):
+                    self.onProjectRemoved?(projectID)
+                case let .threadUpdated(thread, location):
+                    self.onThreadUpdated?(thread, location)
+                case let .threadRemoved(threadID, location):
+                    self.onThreadRemoved?(threadID, location)
+                }
             }
         }
     }
@@ -1207,5 +1487,38 @@ final class T3CodeClient: T3CodeClientProtocol {
             return nil
         }
         return try? JSONDecoder().decode(T.self, from: data)
+    }
+
+    private static func decodeJSONArray<T: Decodable>(_ raw: Any) -> [T] {
+        guard let list = raw as? [Any] else { return [] }
+        if let whole: [T] = decodeJSONValue(list) {
+            return whole
+        }
+        let decoder = JSONDecoder()
+        var decoded: [T] = []
+        decoded.reserveCapacity(list.count)
+        for item in list {
+            guard JSONSerialization.isValidJSONObject(item),
+                  let data = try? JSONSerialization.data(withJSONObject: item),
+                  let value = try? decoder.decode(T.self, from: data) else {
+                continue
+            }
+            decoded.append(value)
+        }
+        return decoded
+    }
+
+    private static func decodeConfigPayload(_ raw: Any) -> T3ServerConfigPayload? {
+        if let whole: T3ServerConfigPayload = decodeJSONValue(raw) {
+            return whole
+        }
+        guard let dict = raw as? JSON else { return nil }
+        let env: T3EnvironmentInfo? = dict["environment"].flatMap(decodeJSONValue)
+        let providers: [T3ServerProvider]? = dict["providers"].map(decodeJSONArray)
+        let settings: T3ServerSettingsPayload? = dict["settings"].flatMap(decodeJSONValue)
+        if env == nil && providers == nil && settings == nil {
+            return nil
+        }
+        return T3ServerConfigPayload(environment: env, providers: providers, settings: settings)
     }
 }

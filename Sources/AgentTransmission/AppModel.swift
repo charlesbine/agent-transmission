@@ -283,7 +283,14 @@ final class AppModel {
         target.onTasksChanged = { [weak self, weak target] tasks in
             guard let self, let target, self.agentTarget === target else { return }
             self.tasks = tasks
-            self.status = self.parked ? "Parked" : "Ready"
+            if self.parked {
+                self.status = "Parked"
+            } else if self.status == "Starting…"
+                || self.status.hasPrefix("Connecting")
+                || self.status.hasPrefix("Reconnecting")
+                || self.status.hasPrefix("No ") {
+                self.status = "Ready"
+            }
             self.publish()
         }
         target.onFocusedTaskChanged = { [weak self, weak target] taskID in
