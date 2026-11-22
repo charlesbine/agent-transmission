@@ -93,8 +93,38 @@ final class AppModel: ObservableObject {
     private static let transmissionMapKey = "transmissionMap.v1"
     private static let bindingsKey = "transmissionBindings.v2"
     private static let fastModeKey = "fastMode.v1"
+    private static let legacyBundleMigrationKey = "migratedLegacyBundleDefaults.v1"
     private static let parkHoldDuration: TimeInterval = 1.2
     private static let backgroundRefreshInterval: TimeInterval = 30
+
+    static func migrateLegacyBundleDefaultsIfNeeded(
+        from legacySuiteName: String = "com.metaember.agent-transmission",
+        to destination: UserDefaults = .standard
+    ) {
+        guard !destination.bool(forKey: legacyBundleMigrationKey),
+              let legacy = UserDefaults(suiteName: legacySuiteName) else {
+            return
+        }
+
+        let keysToCopy = [
+            AgentTargetKind.userDefaultsKey,
+            transmissionMapKey,
+            "\(transmissionMapKey).t3-code",
+            "\(bindingsKey).t3-code",
+            "\(bindingsKey).codex",
+            fastModeKey,
+            "pinnedTaskID",
+            "pinnedTaskID.t3-code",
+            "pinnedThreadID",
+        ]
+
+        for key in keysToCopy where destination.object(forKey: key) == nil {
+            if let value = legacy.object(forKey: key) {
+                destination.set(value, forKey: key)
+            }
+        }
+        destination.set(true, forKey: legacyBundleMigrationKey)
+    }
 
     var onChange: (() -> Void)?
     var onHUDUpdate: ((ShiftHUDPayload) -> Void)?

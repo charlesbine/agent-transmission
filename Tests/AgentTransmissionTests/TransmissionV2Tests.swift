@@ -132,6 +132,26 @@ final class TransmissionV2Tests: XCTestCase {
         XCTAssertLessThan(neon, carbon)
     }
 
+    func testLegacyBundleDefaultsMigrationCopiesMissingKeysOnce() {
+        let legacySuite = "LegacyMigrationSource.\(UUID().uuidString)"
+        let destSuite = "LegacyMigrationDest.\(UUID().uuidString)"
+        let legacy = UserDefaults(suiteName: legacySuite)!
+        let dest = UserDefaults(suiteName: destSuite)!
+        defer {
+            legacy.removePersistentDomain(forName: legacySuite)
+            dest.removePersistentDomain(forName: destSuite)
+        }
+
+        legacy.set("t3-code", forKey: AgentTargetKind.userDefaultsKey)
+        legacy.set(true, forKey: "fastMode.v1")
+        dest.set(false, forKey: "fastMode.v1")
+
+        AppModel.migrateLegacyBundleDefaultsIfNeeded(from: legacySuite, to: dest)
+
+        XCTAssertEqual(dest.string(forKey: AgentTargetKind.userDefaultsKey), "t3-code")
+        XCTAssertEqual(dest.bool(forKey: "fastMode.v1"), false, "Existing keys in destination must not be overwritten")
+    }
+
     func testOneShotTapParkArmsEffortForSingleShiftAndShowsHoldHUD() {
         let suite = "TransmissionV2Tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

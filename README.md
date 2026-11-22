@@ -201,6 +201,6 @@ AGENT_TRANSMISSION_NOTARY_PROFILE="agent-transmission" \
 
 ## License
 
-Copyright 2026 Meta Ember. Licensed under the [Apache License 2.0](LICENSE).
+Copyright 2026 Charles Bine. Licensed under the [Apache License 2.0](LICENSE).
 
 Apache-2.0 permits commercial redistribution, including selling compiled copies, as long as its terms are followed. It does not grant rights to project or third-party trademarks.
