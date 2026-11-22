@@ -25,7 +25,7 @@
 
 I saw someone float the concept of shifting coding-agent models and reasoning effort with a physical manual gearshifter on X, and **I HAD to build it — so I did.**
 
-Switching models and reasoning levels through nested dropdowns always broke my flow. You're deep in a diff, you know you want a fast **Haiku 5.5** / **Hydrogen** pass, a daily-driver **Fable 5.2** / **Gemini 4 Neon** edit, or a full-send **Opus 5.5** / **GPT-6.2 Sol** reasoning run, and suddenly you're hunting tiny menus with a cursor. Meanwhile, a **$40 6-speed + Reverse sim-racing USB shifter** with a mechanical H-gate, sequential mode switch, and physical `(P)` rocker exists.
+Switching models and reasoning levels through nested dropdowns always broke my flow. You're deep in a diff, you know you want a fast **Haiku 5.5** / **Hydrogen** pass, a balanced **GPT-6.2 Sol** / **Gemini 4 Neon** edit, or a full-send **Opus 5.5** / **Fable 5.2** reasoning run, and suddenly you're hunting tiny menus with a cursor. Meanwhile, a **$40 6-speed + Reverse sim-racing USB shifter** with a mechanical H-gate, sequential mode switch, and physical `(P)` rocker exists.
 
 I ordered a NiTHO `GS-SH Gearshifter`, wired it straight into macOS IOKit USB HID, and built **Agent Transmission** — a zero-dependency native Swift menu-bar app that talks directly to **T3 Code** (over native Orchestration V2 WebSocket RPC across Claude, Codex, Antigravity, and OpenCode) and **Codex Desktop** (over local Unix IPC).
 
@@ -132,11 +132,11 @@ Example Fast → Smart 6+R T3 Code transmission map (auto-populated from your `�
 | Gear | Model | Provider | Typical Use |
 | --- | --- | --- | --- |
 | `1` | **Claude Haiku 5.5** (`claude-haiku-5-5`) | Claude | Instant edits & quick checks |
-| `2` | **Gemini 4 Hydrogen** (`gemini-4-hydrogen`) | Antigravity | Fast multi-file sweeps |
-| `3` | **Claude Fable 5.2** (`claude-fable-5-2`) | Claude | Daily driver coding & writing |
-| `4` | **Gemini 4 Neon** (`gemini-4-neon`) | Antigravity | Deep reasoning & refactors |
-| `5` | **GPT-6.2 Sol** (`gpt-6.2-sol`) | Codex | Hard debugging & systems work |
-| `6` | **Claude Opus 5.5** (`claude-opus-5-5`) | Claude | Full-send architecture & review |
+| `2` | **Gemini 4 Hydrogen** (`gemini-4-hydrogen`) | Antigravity | Fast high-throughput execution |
+| `3` | **GPT-6.2 Sol** (`gpt-6.2-sol`) | Codex | Everyday coding workhorse |
+| `4` | **Gemini 4 Neon** (`gemini-4-neon`) | Antigravity | Balanced frontier refactors & analysis |
+| `5` | **Claude Opus 5.5** (`claude-opus-5-5`) | Claude | Heavyweight flagship daily driver |
+| `6` | **Claude Fable 5.2** (`claude-fable-5-2`) | Claude | Peak frontier architecture & deep reasoning |
 | `R` | **Toggle Plan ↔ Code** *(customizable)* | T3 Code | Flip Plan mode or interrupt active run |
 
 ### Codex Desktop (Experimental Local IPC)

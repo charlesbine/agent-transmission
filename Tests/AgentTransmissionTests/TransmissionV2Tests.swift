@@ -113,6 +113,25 @@ final class TransmissionV2Tests: XCTestCase {
         XCTAssertEqual(model.map.forward.last?.model, "claude-opus-5-5")
     }
 
+    func testModelTierRankOrdersLargerSmarterModelsHigher() {
+        let haiku = T3CodeAgentTarget.modelTierRank(slug: "claude-haiku-5-5", displayName: "Claude Haiku 5.5")
+        let hydrogen = T3CodeAgentTarget.modelTierRank(slug: "gemini-4-hydrogen", displayName: "Gemini 4 Hydrogen")
+        let sol = T3CodeAgentTarget.modelTierRank(slug: "gpt-6.2-sol", displayName: "GPT-6.2 Sol")
+        let neon = T3CodeAgentTarget.modelTierRank(slug: "gemini-4-neon", displayName: "Gemini 4 Neon")
+        let opus = T3CodeAgentTarget.modelTierRank(slug: "claude-opus-5-5", displayName: "Claude Opus 5.5")
+        let fable = T3CodeAgentTarget.modelTierRank(slug: "claude-fable-5-2", displayName: "Claude Fable 5.2")
+        let astra = T3CodeAgentTarget.modelTierRank(slug: "gpt-6.2-astra", displayName: "GPT-6.2 Astra")
+        let carbon = T3CodeAgentTarget.modelTierRank(slug: "gemini-4-carbon", displayName: "Gemini 4 Carbon")
+
+        XCTAssertLessThan(haiku, hydrogen)
+        XCTAssertLessThan(hydrogen, sol)
+        XCTAssertLessThan(sol, neon)
+        XCTAssertLessThan(neon, opus)
+        XCTAssertLessThan(opus, fable)
+        XCTAssertLessThan(sol, astra)
+        XCTAssertLessThan(neon, carbon)
+    }
+
     func testOneShotTapParkArmsEffortForSingleShiftAndShowsHoldHUD() {
         let suite = "TransmissionV2Tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
