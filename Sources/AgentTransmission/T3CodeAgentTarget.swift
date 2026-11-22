@@ -1053,13 +1053,20 @@ final class T3CodeAgentTarget: AgentTarget {
 
     static func modelTierRank(slug: String, displayName: String) -> Int {
         let s = "\(slug) \(displayName)".lowercased()
-        // Lower rank = faster/lighter (1st gear); higher rank = heavier/smarter (6th gear).
-        if s.contains("haiku") || s.contains("mini") || s.contains("nano") || s.contains("lite") { return 10 }
-        if s.contains("flash") || s.contains("luna") || s.contains("fast") || s.contains("devstral") { return 20 }
-        if s.contains("carbon") || s.contains("argon") || s.contains("terra") || s.contains("fable") { return 40 }
-        if s.contains("sonnet") || s.contains("hydrogen") || s.contains("deepseek") { return 55 }
-        if s.contains("astra") || s.contains("neon") || s.contains("2.5-pro") || s.contains("orchestrator") { return 75 }
-        if s.contains("opus") || s.contains("sol") || s.contains("ultra") { return 95 }
+        let tokens = Set(
+            s.components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty }
+        )
+        // Lower rank = faster/lighter (1st gear); higher rank = larger/smarter frontier (6th gear).
+        // Use token matching so e.g. "mini" never falsely matches "gemini", and check
+        // explicit speed/frontier qualifiers before generic family tokens.
+        if !tokens.isDisjoint(with: ["haiku", "mini", "nano", "lite", "luna"]) { return 10 }
+        if !tokens.isDisjoint(with: ["flash", "fast", "devstral"]) { return 20 }
+        if !tokens.isDisjoint(with: ["fable", "carbon", "astra", "orchestrator", "ultra"]) { return 95 }
+        if !tokens.isDisjoint(with: ["opus", "argon"]) { return 78 }
+        if !tokens.isDisjoint(with: ["neon", "pro"]) { return 60 }
+        if !tokens.isDisjoint(with: ["sonnet", "sol"]) { return 45 }
+        if !tokens.isDisjoint(with: ["hydrogen", "terra", "deepseek"]) { return 30 }
         return 50
     }
 
