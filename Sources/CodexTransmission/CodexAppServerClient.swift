@@ -90,14 +90,16 @@ final class CodexAppServerClient {
         }
     }
 
+    static let listTasksParams: JSON = [
+        "archived": false,
+        "limit": 24,
+        "sortKey": "updated_at",
+        "sortDirection": "desc",
+        "useStateDbOnly": true,
+    ]
+
     func listTasks(completion: @escaping (Result<[AgentTask], Error>) -> Void) {
-        request(method: "thread/list", params: [
-            "archived": false,
-            "limit": 24,
-            "sortKey": "updated_at",
-            "sortDirection": "desc",
-            "useStateDbOnly": false,
-        ]) { result in
+        request(method: "thread/list", params: Self.listTasksParams) { result in
             let parsed: Result<[AgentTask], Error> = result.flatMap { raw in
                 guard let response = raw as? JSON,
                       let rows = response["data"] as? [JSON] else {

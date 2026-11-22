@@ -15,6 +15,7 @@ final class CodexAgentTarget: AgentTarget {
     private let control = CodexDesktopIPCClient()
     private var discoveryConnected = false
     private var controlConnected = false
+    private var isRefreshingTasks = false
     private var focusSynchronizer = FocusStatusSynchronizer()
 
     private static let families: [(name: String, model: String, efforts: [ReasoningEffort])] = [
@@ -44,6 +45,7 @@ final class CodexAgentTarget: AgentTarget {
         catalog.onDisconnected = { [weak self] message in
             guard let self else { return }
             self.discoveryConnected = false
+            self.isRefreshingTasks = false
             self.publishState(message: message)
         }
         control.onDisconnected = { [weak self] message in
@@ -68,6 +70,7 @@ final class CodexAgentTarget: AgentTarget {
     }
 
     func stop() {
+        isRefreshingTasks = false
         catalog.close()
         control.close()
     }
@@ -75,6 +78,7 @@ final class CodexAgentTarget: AgentTarget {
     func reconnect() {
         discoveryConnected = false
         controlConnected = false
+        isRefreshingTasks = false
         focusSynchronizer.controlDidDisconnect()
         onFocusedTaskChanged?(nil)
         publishState(message: "Connecting to Codex…")
@@ -95,18 +99,20 @@ final class CodexAgentTarget: AgentTarget {
     }
 
     func refreshTasks() {
-        guard discoveryConnected else { return }
+        guard discoveryConnected, !isRefreshingTasks else { return }
+        isRefreshingTasks = true
         catalog.listTasks { [weak self] result in
+            guard let self else { return }
+            self.isRefreshingTasks = false
             switch result {
             case let .success(tasks):
-                guard let self else { return }
                 let anchorThreadID = self.focusSynchronizer.tasksDidChange(tasks)
                 self.onTasksChanged?(tasks)
                 if let anchorThreadID {
                     self.control.requestFocusedThreadStatus(anchorThreadID: anchorThreadID)
                 }
             case let .failure(error):
-                self?.publishState(message: error.localizedDescription)
+                self.publishState(message: error.localizedDescription)
             }
         }
     }
