@@ -108,39 +108,37 @@ struct HGateDiagramView: View {
     private static let cardBase = Color(red: 0.095, green: 0.112, blue: 0.148)
 
     private var columnSpacing: CGFloat { isHUD ? 12 : 7 }
-    private var cardHeight: CGFloat { isHUD ? 72 : 50 }
-    private var channelHeight: CGFloat { isHUD ? 44 : 22 }
+    private var cardHeight: CGFloat { isHUD ? 72 : 52 }
+    private var channelHeight: CGFloat { isHUD ? 44 : 34 }
 
     private func slot(at index: Int) -> HUDGateSlot? {
         slots.first(where: { $0.position.rawValue == index })
     }
 
     var body: some View {
-        ZStack {
-            // Machined H-pattern channel tracks connecting 1↕2, 3↕4, 5↕6, Neutral spine, and →R drop-leg
-            hPatternTracksOverlay
+        // 4-column physical H-gate card layout:
+        // Top row:    [ 1 ]   [ 3 ]   [ 5 ]   (empty)
+        // Center:     ======= Neutral Spine =======
+        // Bottom row: [ 2 ]   [ 4 ]   [ 6 ]   [ R ]
+        VStack(spacing: channelHeight) {
+            HStack(spacing: columnSpacing) {
+                slotView(for: 1)
+                slotView(for: 3)
+                slotView(for: 5)
+                // 4th column top is empty on a 6+R shifter — show compact legend/badge
+                fourthColumnTopHeader
+            }
 
-            // 4-column physical H-gate card layout:
-            // Top row:    [ 1 ]   [ 3 ]   [ 5 ]   (empty)
-            // Center:     ======= Neutral Spine =======
-            // Bottom row: [ 2 ]   [ 4 ]   [ 6 ]   [ R ]
-            VStack(spacing: channelHeight) {
-                HStack(spacing: columnSpacing) {
-                    slotView(for: 1)
-                    slotView(for: 3)
-                    slotView(for: 5)
-                    // 4th column top is empty on a 6+R shifter — show compact legend/badge in HUD
-                    fourthColumnTopHeader
-                }
-
-                HStack(spacing: columnSpacing) {
-                    slotView(for: 2)
-                    slotView(for: 4)
-                    slotView(for: 6)
-                    reverseCardView
-                }
+            HStack(spacing: columnSpacing) {
+                slotView(for: 2)
+                slotView(for: 4)
+                slotView(for: 6)
+                reverseCardView
             }
         }
+        // Background GeometryReader inherits the exact tight VStack height —
+        // zero wasted vertical space and rails stop flush between the two rows.
+        .background(hPatternTracksOverlay)
     }
 
     private var hPatternTracksOverlay: some View {
