@@ -62,9 +62,17 @@ final class FloatingHUDController {
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
 
-        let hosting = NSHostingView(rootView: FloatingShiftHUDView(state: state, onDismiss: { [weak self] in
-            self?.dismiss()
-        }))
+        let hosting = NSHostingView(rootView: FloatingShiftHUDView(
+            state: state,
+            parkHintProvider: { [weak model] in
+                guard let b = model?.bindings else { return "(P) Park / Hold Fast" }
+                return "(P) \(b.parkTapAction.shortLabel) · Hold \(b.parkHoldAction.shortLabel)"
+            },
+            onDismiss: { [weak self] in
+                self?.model.disarmOneShotLayer()
+                self?.dismiss()
+            }
+        ))
         hosting.wantsLayer = true
         hosting.layer?.backgroundColor = NSColor.clear.cgColor
         panel.contentView = hosting
@@ -81,8 +89,18 @@ final class FloatingHUDController {
         panel.ignoresMouseEvents = payload.kind != .decision
 
         state.payload = payload
-        let targetWidth: CGFloat = payload.slots.isEmpty ? 460 : 696
-        let targetHeight: CGFloat = payload.slots.isEmpty ? 104 : 306
+        let targetWidth: CGFloat
+        let targetHeight: CGFloat
+        if case .parkHolding = payload.kind {
+            targetWidth = 520
+            targetHeight = 148
+        } else if payload.slots.isEmpty {
+            targetWidth = 460
+            targetHeight = 104
+        } else {
+            targetWidth = 696
+            targetHeight = 314
+        }
 
         let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) })
             ?? NSScreen.main
@@ -177,12 +195,22 @@ final class FloatingHUDController {
 
 private struct FloatingShiftHUDView: View {
     @ObservedObject var state: FloatingHUDState
+    let parkHintProvider: () -> String
     let onDismiss: () -> Void
 
     var body: some View {
         Group {
             if let payload = state.payload {
-                if payload.slots.isEmpty {
+                if case let .parkHolding(startedAt, holdDuration, tapLabel, holdLabel, chordLabel) = payload.kind {
+                    parkHoldGuide(
+                        payload: payload,
+                        startedAt: startedAt,
+                        holdDuration: holdDuration,
+                        tapLabel: tapLabel,
+                        holdLabel: holdLabel,
+                        chordLabel: chordLabel
+                    )
+                } else if payload.slots.isEmpty {
                     compactToast(payload)
                 } else {
                     gateOverlay(payload)
@@ -191,6 +219,125 @@ private struct FloatingShiftHUDView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(10)
+    }
+
+    private func parkHoldGuide(
+        payload: ShiftHUDPayload,
+        startedAt: Date,
+        holdDuration: TimeInterval,
+        tapLabel: String,
+        holdLabel: String,
+        chordLabel: String?
+    ) -> some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+            let elapsed = max(0, context.date.timeIntervalSince(startedAt))
+            let progress = min(1.0, elapsed / max(holdDuration, 0.1))
+            let remaining = max(0, holdDuration - elapsed)
+            let amber = Color(hex: "#F59E0B")
+            let cyan = Color(hex: "#38BDF8")
+
+            VStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    Text("P")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(.black)
+                        .frame(width: 22, height: 22)
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(amber))
+
+                    Text("Holding (P) Switch")
+                        .font(.system(size: 13.5, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+
+                    Spacer()
+
+                    Text(remaining > 0.05 ? String(format: "%.1fs to hold action", remaining) : "TRIGGERING…")
+                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                        .foregroundColor(amber)
+                }
+
+                HStack(spacing: 10) {
+                    // Release-now card
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("RELEASE NOW")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(cyan)
+                        Text(tapLabel)
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(cyan.opacity(0.12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(cyan.opacity(0.45), lineWidth: 1)
+                            )
+                    )
+
+                    // Keep-holding card with live progress fill
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text("KEEP HOLDING")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundColor(amber)
+                            Spacer()
+                            Text("\(Int(progress * 100))%")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundColor(amber.opacity(0.85))
+                        }
+                        Text(holdLabel)
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.white.opacity(0.10))
+                                Capsule()
+                                    .fill(amber)
+                                    .frame(width: max(4, geo.size.width * progress))
+                            }
+                        }
+                        .frame(height: 5)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(amber.opacity(0.12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(amber.opacity(0.55), lineWidth: 1)
+                            )
+                    )
+                }
+
+                if let chordLabel {
+                    HStack {
+                        Text(chordLabel)
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundColor(Color.white.opacity(0.48))
+                        Spacer()
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color(red: 0.052, green: 0.064, blue: 0.092).opacity(0.96))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(amber.opacity(0.4), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.65), radius: 24, y: 10)
+            )
+        }
     }
 
     private func compactToast(_ payload: ShiftHUDPayload) -> some View {
@@ -303,12 +450,12 @@ private struct FloatingShiftHUDView: View {
             // Footer hints / current state (strictly single-line, never wraps)
             HStack(spacing: 12) {
                 if payload.kind == .decision {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 9) {
                         Text("⇧ Effort")
                         Text("·").foregroundColor(Color.white.opacity(0.25))
                         Text("⌥ Modes")
                         Text("·").foregroundColor(Color.white.opacity(0.25))
-                        Text("(P) Park / Hold Fast")
+                        Text(parkHintProvider())
                     }
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
@@ -328,6 +475,29 @@ private struct FloatingShiftHUDView: View {
             }
             .font(.system(size: 10.5, weight: .medium, design: .monospaced))
             .foregroundColor(Color.white.opacity(0.48))
+
+            // Smooth draining countdown bar when Decision/One-Shot HUD is timed
+            if payload.kind == .decision, let delay = payload.autoHideDelay, delay > 0 {
+                if payload.modifierActive {
+                    Capsule()
+                        .fill(accent.opacity(0.55))
+                        .frame(height: 3)
+                } else {
+                    TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                        let elapsed = max(0, context.date.timeIntervalSince(payload.emittedAt))
+                        let remainingRatio = max(0, min(1, 1.0 - elapsed / delay))
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.white.opacity(0.08))
+                                Capsule()
+                                    .fill(accent.opacity(0.75))
+                                    .frame(width: geo.size.width * remainingRatio)
+                            }
+                        }
+                        .frame(height: 3)
+                    }
+                }
+            }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 15)
@@ -346,6 +516,7 @@ private struct FloatingShiftHUDView: View {
         let (text, color): (String, Color) = {
             switch payload.kind {
             case .parked: return ("P", Color(hex: "#F59E0B"))
+            case .parkHolding: return ("P", Color(hex: "#F59E0B"))
             case .error: return ("!", Color(hex: "#EF4444"))
             case let .action(badge): return (badge, Color(hex: "#38BDF8"))
             case let .engaged(pos): return (pos.label, Color(hex: "#10B981"))

@@ -316,6 +316,8 @@ public enum ReverseGearAction: String, Codable, CaseIterable, Sendable {
 }
 
 public enum ParkButtonAction: String, Codable, CaseIterable, Sendable {
+    case oneShotEffort
+    case oneShotPermissions
     case parkingBrake
     case toggleFastMode
     case togglePlanMode
@@ -325,10 +327,25 @@ public enum ParkButtonAction: String, Codable, CaseIterable, Sendable {
 
     public var displayLabel: String {
         switch self {
+        case .oneShotEffort: "One-Shot Effort (next shift)"
+        case .oneShotPermissions: "One-Shot T3 Modes (next shift)"
         case .parkingBrake: "Software Parking Brake"
         case .toggleFastMode: "Toggle Fast Mode"
         case .togglePlanMode: "Toggle Plan ↔ Code"
         case .interruptRun: "Interrupt Active Run"
+        case .settleThread: "Settle Thread"
+        case .disabled: "Disabled"
+        }
+    }
+
+    public var shortLabel: String {
+        switch self {
+        case .oneShotEffort: "One-Shot Effort"
+        case .oneShotPermissions: "One-Shot Modes"
+        case .parkingBrake: "Parking Brake"
+        case .toggleFastMode: "Fast Mode"
+        case .togglePlanMode: "Plan ↔ Code"
+        case .interruptRun: "Interrupt Run"
         case .settleThread: "Settle Thread"
         case .disabled: "Disabled"
         }
@@ -463,7 +480,7 @@ public struct TransmissionBindings: Codable, Equatable, Sendable {
     public static let t3Default = TransmissionBindings(
         gearboxMode: .models,
         reverseAction: .togglePlanMode,
-        parkTapAction: .parkingBrake,
+        parkTapAction: .oneShotEffort,
         parkHoldAction: .toggleFastMode,
         parkChordLayer: .effort,
         shiftModifierLayer: .effort,

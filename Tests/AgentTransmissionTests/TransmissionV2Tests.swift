@@ -112,6 +112,51 @@ final class TransmissionV2Tests: XCTestCase {
         XCTAssertEqual(model.map.forward.first?.model, "claude-haiku-5-5")
         XCTAssertEqual(model.map.forward.last?.model, "claude-opus-5-5")
     }
+
+    func testOneShotTapParkArmsEffortForSingleShiftAndShowsHoldHUD() {
+        let suite = "TransmissionV2Tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let surface = V2FakeSurface()
+        let target = V2FakeRichTarget()
+        let model = AppModel(
+            controlSurface: surface,
+            initialTargetKind: .t3Code,
+            targetFactory: { _ in target },
+            defaults: defaults,
+            modifierProvider: { ActiveKeyboardModifiers() }
+        )
+
+        var hudEvents: [ShiftHUDPayload] = []
+        model.onHUDUpdate = { hudEvents.append($0) }
+        model.start()
+
+        // Press (P) -> immediately pops Hold Guide HUD with progress info
+        surface.emit([.modifierChanged(true)])
+        if case .parkHolding = hudEvents.last?.kind {
+            // expected
+        } else {
+            XCTFail("Expected .parkHolding HUD when (P) is pressed down")
+        }
+
+        // Release (P) quickly -> arms One-Shot Effort layer (t3Default tap action)
+        surface.emit([.modifierChanged(false)])
+        XCTAssertEqual(model.armedOneShotLayer, .effort)
+        XCTAssertEqual(hudEvents.last?.kind, .decision)
+        XCTAssertEqual(hudEvents.last?.layer, .effort)
+        XCTAssertEqual(hudEvents.last?.layerSourceLabel, "ONE-SHOT")
+
+        // Next gear shift applies Effort (5 -> Max) and automatically disarms back to Models
+        surface.emit([.selectPosition(.fifth)])
+        XCTAssertNil(model.armedOneShotLayer)
+        XCTAssertEqual(target.lastAppliedUpdate?.preset?.model, "claude-opus-5-5")
+        XCTAssertEqual(target.lastAppliedUpdate?.preset?.effort, .max)
+
+        // Following gear shift returns to normal Models mode (gear 2 -> Haiku)
+        surface.emit([.selectPosition(.second)])
+        XCTAssertEqual(target.lastAppliedUpdate?.preset?.model, "claude-haiku-5-5")
+    }
 }
 
 private final class V2FakeSurface: ControlSurface {

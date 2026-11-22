@@ -60,6 +60,13 @@ enum ShiftHUDKind: Equatable, Sendable {
     case decision
     case engaged(GearPosition)
     case action(badge: String)
+    case parkHolding(
+        startedAt: Date,
+        holdDuration: TimeInterval,
+        tapLabel: String,
+        holdLabel: String,
+        chordLabel: String?
+    )
     case parked
     case error
 }
@@ -78,6 +85,8 @@ struct ShiftHUDPayload: Equatable, Sendable {
     let autoHideDelay: TimeInterval?
     /// True while a modifier key or (P) is currently held so the HUD stays pinned.
     let modifierActive: Bool
+    /// Timestamp when this HUD payload was emitted (drives countdown progress bars).
+    let emittedAt: Date
 }
 
 final class AppModel: ObservableObject {
@@ -97,6 +106,7 @@ final class AppModel: ObservableObject {
     private(set) var parked = false
     private(set) var modifierHeld = false
     private(set) var inNeutral = false
+    private(set) var armedOneShotLayer: GearLayer?
     private(set) var fastMode: Bool
     private(set) var lastGear: GearPosition?
     private(set) var currentPreset: ModelPreset?
@@ -152,6 +162,7 @@ final class AppModel: ObservableObject {
     private var refreshTimer: Timer?
     private var modifierGestureConsumed = false
     private var modifierHoldWorkItem: DispatchWorkItem?
+    private var oneShotExpireWorkItem: DispatchWorkItem?
     private var lastCatalogSignature: String = ""
 
     private var currentTransmissionMapKey: String {
@@ -256,6 +267,7 @@ final class AppModel: ObservableObject {
         refreshTimer?.invalidate()
         refreshTimer = nil
         modifierHoldWorkItem?.cancel()
+        oneShotExpireWorkItem?.cancel()
         controlSurface.stop()
         agentTarget.stop()
     }
@@ -451,6 +463,9 @@ final class AppModel: ObservableObject {
         if modifierHeld, bindings.parkChordLayer != .disabled {
             return (gearLayer(from: bindings.parkChordLayer), "(P) HOLD")
         }
+        if let armedOneShotLayer {
+            return (armedOneShotLayer, "ONE-SHOT")
+        }
         switch bindings.gearboxMode {
         case .models:
             return (.models, nil)
@@ -459,6 +474,44 @@ final class AppModel: ObservableObject {
         case .custom:
             return (.custom, nil)
         }
+    }
+
+    func armOneShotLayer(_ layer: GearLayer) {
+        if armedOneShotLayer == layer {
+            disarmOneShotLayer(showCancelledToast: true)
+            return
+        }
+        oneShotExpireWorkItem?.cancel()
+        armedOneShotLayer = layer
+        let duration = bindings.neutralHUDTimeout.duration ?? 8.0
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.armedOneShotLayer == layer else { return }
+            self.armedOneShotLayer = nil
+            self.oneShotExpireWorkItem = nil
+            self.status = "Ready"
+            self.publish()
+        }
+        oneShotExpireWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: workItem)
+        status = "One-shot \(layer.badgeLabel.lowercased()) armed · throw next gear"
+        emitDecisionHUD(
+            force: true,
+            overrideTimeout: duration,
+            headlineOverride: layer == .effort ? "Next Shift → Effort" : "Next Shift → T3 Modes"
+        )
+        publish()
+    }
+
+    func disarmOneShotLayer(showCancelledToast: Bool = false) {
+        guard armedOneShotLayer != nil else { return }
+        oneShotExpireWorkItem?.cancel()
+        oneShotExpireWorkItem = nil
+        armedOneShotLayer = nil
+        status = parked ? "Parked" : "Ready"
+        if showCancelledToast {
+            emitActionHUD(kind: .action(badge: "CANCEL"), headline: "One-Shot Cancelled", detail: "Back to \(bindings.gearboxMode.displayLabel) mode")
+        }
+        publish()
     }
 
     private func gearLayer(from action: ModifierLayerAction) -> GearLayer {
@@ -478,7 +531,7 @@ final class AppModel: ObservableObject {
     func updateLiveModifiers(_ modifiers: ActiveKeyboardModifiers) {
         guard modifiers != liveModifiers else { return }
         liveModifiers = modifiers
-        if inNeutral && bindings.showFloatingHUD && bindings.showHUDOnNeutral {
+        if (inNeutral || armedOneShotLayer != nil) && bindings.showFloatingHUD {
             emitDecisionHUD()
         }
         publish()
@@ -876,7 +929,14 @@ final class AppModel: ObservableObject {
 
         guard let gearIndex = position.directGearIndex else { return }
 
-        // Resolve active layer (keyboard modifiers > (P) chord > gearboxMode)
+        // Resolve active layer (keyboard modifiers > (P) chord > armed one-shot > gearboxMode)
+        let consumedOneShot = armedOneShotLayer
+        if consumedOneShot != nil {
+            oneShotExpireWorkItem?.cancel()
+            oneShotExpireWorkItem = nil
+            armedOneShotLayer = nil
+        }
+
         let resolved: (layer: GearLayer, source: String?)
         if liveModifiers.shift && bindings.shiftModifierLayer != .disabled {
             resolved = (gearLayer(from: bindings.shiftModifierLayer), "⇧ SHIFT")
@@ -884,6 +944,8 @@ final class AppModel: ObservableObject {
             resolved = (gearLayer(from: bindings.optionModifierLayer), "⌥ OPTION")
         } else if parkChord && bindings.parkChordLayer != .disabled {
             resolved = (gearLayer(from: bindings.parkChordLayer), "(P) HOLD")
+        } else if let consumedOneShot {
+            resolved = (consumedOneShot, "ONE-SHOT")
         } else {
             switch bindings.gearboxMode {
             case .models: resolved = (.models, nil)
@@ -941,6 +1003,10 @@ final class AppModel: ObservableObject {
 
     private func executeParkAction(_ action: ParkButtonAction) {
         switch action {
+        case .oneShotEffort:
+            armOneShotLayer(.effort)
+        case .oneShotPermissions:
+            armOneShotLayer(.permissions)
         case .parkingBrake:
             toggleParkingBrake()
         case .toggleFastMode:
@@ -1060,10 +1126,8 @@ final class AppModel: ObservableObject {
             }
             modifierHoldWorkItem = workItem
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.parkHoldDuration, execute: workItem)
-            status = "(P) held · release: \(bindings.parkTapAction.displayLabel)"
-            if inNeutral && bindings.showFloatingHUD && bindings.showHUDOnNeutral {
-                emitDecisionHUD()
-            }
+            status = "(P) held · release: \(bindings.parkTapAction.shortLabel) · hold: \(bindings.parkHoldAction.shortLabel)"
+            emitParkHoldHUD()
         } else {
             modifierHoldWorkItem?.cancel()
             modifierHoldWorkItem = nil
@@ -1133,25 +1197,62 @@ final class AppModel: ObservableObject {
         liveModifiers.shift || liveModifiers.option || modifierHeld
     }
 
-    private func emitDecisionHUD(force: Bool = false, overrideTimeout: TimeInterval? = nil) {
+    private func emitParkHoldHUD() {
+        guard bindings.showFloatingHUD else { return }
+        let resolved = resolveActiveLayer()
+        let chordText: String? = bindings.parkChordLayer == .disabled
+            ? nil
+            : "(P) + Gear 1–6 → \(bindings.parkChordLayer.displayLabel)"
+        let now = Date()
+        let payload = ShiftHUDPayload(
+            kind: .parkHolding(
+                startedAt: now,
+                holdDuration: Self.parkHoldDuration,
+                tapLabel: bindings.parkTapAction.shortLabel,
+                holdLabel: bindings.parkHoldAction.shortLabel,
+                chordLabel: chordText
+            ),
+            layer: resolved.layer,
+            layerSourceLabel: "(P) SWITCH",
+            headline: "Release or Keep Holding (P)",
+            detail: targetTask?.title ?? agentTarget.name,
+            threadTitle: targetTask?.title,
+            slots: [],
+            reverseLabel: reverseSlotLabel(),
+            isError: false,
+            autoHideDelay: nil,
+            modifierActive: true,
+            emittedAt: now
+        )
+        onHUDUpdate?(payload)
+    }
+
+    private func emitDecisionHUD(
+        force: Bool = false,
+        overrideTimeout: TimeInterval? = nil,
+        headlineOverride: String? = nil
+    ) {
         guard force || bindings.showFloatingHUD else { return }
         let resolved = resolveActiveLayer()
         let live = currentThreadState
         let currentSummary = live.map { "\($0.modelLabel)\($0.effort.map { " · \($0.shortLabel)" } ?? "") · \($0.interactionMode.displayLabel)" }
             ?? "Select a gear"
         let timeout: TimeInterval? = overrideTimeout ?? bindings.neutralHUDTimeout.duration
+        let headline: String = headlineOverride
+            ?? (armedOneShotLayer != nil ? "Next Shift → \(resolved.layer.badgeLabel.capitalized)" : "Neutral · Choose Gear")
         let payload = ShiftHUDPayload(
             kind: .decision,
             layer: resolved.layer,
             layerSourceLabel: resolved.source,
-            headline: "Neutral · Choose Gear",
+            headline: headline,
             detail: currentSummary,
             threadTitle: targetTask?.title,
             slots: hudSlots(for: resolved.layer, highlighted: nil),
             reverseLabel: reverseSlotLabel(),
             isError: false,
             autoHideDelay: timeout,
-            modifierActive: hasAnyActiveModifier
+            modifierActive: hasAnyActiveModifier,
+            emittedAt: Date()
         )
         onHUDUpdate?(payload)
     }
@@ -1176,7 +1277,8 @@ final class AppModel: ObservableObject {
             reverseLabel: reverseSlotLabel(),
             isError: false,
             autoHideDelay: bindings.engagedHUDTimeout.duration,
-            modifierActive: false
+            modifierActive: false,
+            emittedAt: Date()
         )
         onHUDUpdate?(payload)
     }
@@ -1206,7 +1308,8 @@ final class AppModel: ObservableObject {
             reverseLabel: reverseSlotLabel(),
             isError: false,
             autoHideDelay: bindings.engagedHUDTimeout.duration,
-            modifierActive: false
+            modifierActive: false,
+            emittedAt: Date()
         )
         onHUDUpdate?(payload)
     }
@@ -1225,7 +1328,8 @@ final class AppModel: ObservableObject {
             reverseLabel: reverseSlotLabel(),
             isError: true,
             autoHideDelay: 4.0,
-            modifierActive: false
+            modifierActive: false,
+            emittedAt: Date()
         )
         onHUDUpdate?(payload)
     }
