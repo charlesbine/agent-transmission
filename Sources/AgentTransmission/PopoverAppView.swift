@@ -406,16 +406,15 @@ struct PopoverAppView: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.white)
                     Spacer()
-                    Picker("", selection: Binding(
-                        get: { model.bindings.reverseAction },
-                        set: { newVal in model.updateBindings { $0.reverseAction = newVal } }
-                    )) {
-                        ForEach(ReverseGearAction.allCases, id: \.self) { action in
-                            Text(action.displayLabel).tag(action)
-                        }
+                    uniformDropdown(
+                        title: model.bindings.reverseAction.displayLabel,
+                        options: ReverseGearAction.allCases,
+                        selected: model.bindings.reverseAction,
+                        label: \.displayLabel,
+                        width: 224
+                    ) { newVal in
+                        model.updateBindings { $0.reverseAction = newVal }
                     }
-                    .labelsHidden()
-                    .frame(width: 190)
                 }
                 .padding(.horizontal, 14)
             }
@@ -585,86 +584,72 @@ struct PopoverAppView: View {
 
     private var controlsTab: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 11) {
                 sectionHeader("PHYSICAL SWITCHES")
                 bindingRow("Reverse (R)") {
-                    Picker("", selection: Binding(
-                        get: { model.bindings.reverseAction },
-                        set: { v in model.updateBindings { $0.reverseAction = v } }
-                    )) {
-                        ForEach(ReverseGearAction.allCases, id: \.self) { Text($0.displayLabel).tag($0) }
-                    }
-                    .labelsHidden()
-                    .frame(width: 195)
+                    uniformDropdown(
+                        title: model.bindings.reverseAction.displayLabel,
+                        options: ReverseGearAction.allCases,
+                        selected: model.bindings.reverseAction,
+                        label: \.displayLabel
+                    ) { v in model.updateBindings { $0.reverseAction = v } }
                 }
 
                 bindingRow("Tap (P) Switch") {
-                    Picker("", selection: Binding(
-                        get: { model.bindings.parkTapAction },
-                        set: { v in model.updateBindings { $0.parkTapAction = v } }
-                    )) {
-                        ForEach(ParkButtonAction.allCases, id: \.self) { Text($0.displayLabel).tag($0) }
-                    }
-                    .labelsHidden()
-                    .frame(width: 195)
+                    uniformDropdown(
+                        title: model.bindings.parkTapAction.displayLabel,
+                        options: ParkButtonAction.allCases,
+                        selected: model.bindings.parkTapAction,
+                        label: \.displayLabel
+                    ) { v in model.updateBindings { $0.parkTapAction = v } }
                 }
 
                 bindingRow("Hold (P) 1.2s") {
-                    Picker("", selection: Binding(
-                        get: { model.bindings.parkHoldAction },
-                        set: { v in model.updateBindings { $0.parkHoldAction = v } }
-                    )) {
-                        ForEach(ParkButtonAction.allCases, id: \.self) { Text($0.displayLabel).tag($0) }
-                    }
-                    .labelsHidden()
-                    .frame(width: 195)
+                    uniformDropdown(
+                        title: model.bindings.parkHoldAction.displayLabel,
+                        options: ParkButtonAction.allCases,
+                        selected: model.bindings.parkHoldAction,
+                        label: \.displayLabel
+                    ) { v in model.updateBindings { $0.parkHoldAction = v } }
                 }
 
                 bindingRow("Sequential (S+ / S−)") {
-                    Picker("", selection: Binding(
-                        get: { model.bindings.sequentialAction },
-                        set: { v in model.updateBindings { $0.sequentialAction = v } }
-                    )) {
-                        ForEach(SequentialPaddleAction.allCases, id: \.self) { Text($0.displayLabel).tag($0) }
-                    }
-                    .labelsHidden()
-                    .frame(width: 195)
+                    uniformDropdown(
+                        title: model.bindings.sequentialAction.displayLabel,
+                        options: SequentialPaddleAction.allCases,
+                        selected: model.bindings.sequentialAction,
+                        label: \.displayLabel
+                    ) { v in model.updateBindings { $0.sequentialAction = v } }
                 }
 
                 Divider().overlay(Color.white.opacity(0.08))
                 sectionHeader("MODIFIER LAYERS (HOLD + GEAR 1–6)")
 
                 bindingRow("⇧ Shift + Gear") {
-                    Picker("", selection: Binding(
-                        get: { model.bindings.shiftModifierLayer },
-                        set: { v in model.updateBindings { $0.shiftModifierLayer = v } }
-                    )) {
-                        ForEach(ModifierLayerAction.allCases, id: \.self) { Text($0.displayLabel).tag($0) }
-                    }
-                    .labelsHidden()
-                    .frame(width: 195)
+                    uniformDropdown(
+                        title: model.bindings.shiftModifierLayer.displayLabel,
+                        options: ModifierLayerAction.allCases,
+                        selected: model.bindings.shiftModifierLayer,
+                        label: \.displayLabel
+                    ) { v in model.updateBindings { $0.shiftModifierLayer = v } }
                 }
 
                 bindingRow("⌥ Option + Gear") {
-                    Picker("", selection: Binding(
-                        get: { model.bindings.optionModifierLayer },
-                        set: { v in model.updateBindings { $0.optionModifierLayer = v } }
-                    )) {
-                        ForEach(ModifierLayerAction.allCases, id: \.self) { Text($0.displayLabel).tag($0) }
-                    }
-                    .labelsHidden()
-                    .frame(width: 195)
+                    uniformDropdown(
+                        title: model.bindings.optionModifierLayer.displayLabel,
+                        options: ModifierLayerAction.allCases,
+                        selected: model.bindings.optionModifierLayer,
+                        label: \.displayLabel
+                    ) { v in model.updateBindings { $0.optionModifierLayer = v } }
                 }
 
                 bindingRow("(P) Hold + Gear") {
-                    Picker("", selection: Binding(
-                        get: { model.bindings.parkChordLayer },
-                        set: { v in model.updateBindings { $0.parkChordLayer = v } }
-                    )) {
-                        ForEach(ModifierLayerAction.allCases, id: \.self) { Text($0.displayLabel).tag($0) }
-                    }
-                    .labelsHidden()
-                    .frame(width: 195)
+                    uniformDropdown(
+                        title: model.bindings.parkChordLayer.displayLabel,
+                        options: ModifierLayerAction.allCases,
+                        selected: model.bindings.parkChordLayer,
+                        label: \.displayLabel
+                    ) { v in model.updateBindings { $0.parkChordLayer = v } }
                 }
 
                 Divider().overlay(Color.white.opacity(0.08))
@@ -684,26 +669,22 @@ struct PopoverAppView: View {
                 .disabled(!model.bindings.showFloatingHUD)
 
                 bindingRow("Neutral HUD stays open") {
-                    Picker("", selection: Binding(
-                        get: { model.bindings.neutralHUDTimeout },
-                        set: { v in model.updateBindings { $0.neutralHUDTimeout = v } }
-                    )) {
-                        ForEach(NeutralHUDTimeout.allCases, id: \.self) { Text($0.displayLabel).tag($0) }
-                    }
-                    .labelsHidden()
-                    .frame(width: 175)
+                    uniformDropdown(
+                        title: model.bindings.neutralHUDTimeout.displayLabel,
+                        options: NeutralHUDTimeout.allCases,
+                        selected: model.bindings.neutralHUDTimeout,
+                        label: \.displayLabel
+                    ) { v in model.updateBindings { $0.neutralHUDTimeout = v } }
                 }
                 .disabled(!model.bindings.showFloatingHUD || !model.bindings.showHUDOnNeutral)
 
                 bindingRow("Shift toast duration") {
-                    Picker("", selection: Binding(
-                        get: { model.bindings.engagedHUDTimeout },
-                        set: { v in model.updateBindings { $0.engagedHUDTimeout = v } }
-                    )) {
-                        ForEach(EngagedHUDTimeout.allCases, id: \.self) { Text($0.displayLabel).tag($0) }
-                    }
-                    .labelsHidden()
-                    .frame(width: 175)
+                    uniformDropdown(
+                        title: model.bindings.engagedHUDTimeout.displayLabel,
+                        options: EngagedHUDTimeout.allCases,
+                        selected: model.bindings.engagedHUDTimeout,
+                        label: \.displayLabel
+                    ) { v in model.updateBindings { $0.engagedHUDTimeout = v } }
                 }
                 .disabled(!model.bindings.showFloatingHUD)
 
@@ -740,6 +721,50 @@ struct PopoverAppView: View {
             }
             .padding(14)
         }
+    }
+
+    private func uniformDropdown<T: Hashable>(
+        title: String,
+        options: [T],
+        selected: T,
+        label: KeyPath<T, String>,
+        width: CGFloat = 224,
+        onSelect: @escaping (T) -> Void
+    ) -> some View {
+        Menu {
+            ForEach(options, id: \.self) { option in
+                Button {
+                    onSelect(option)
+                } label: {
+                    Text(option == selected ? "✓ \(option[keyPath: label])" : option[keyPath: label])
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(Color.white.opacity(0.5))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5.5)
+            .frame(width: width, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.white.opacity(0.075))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .stroke(Color.white.opacity(0.11), lineWidth: 1)
+                    )
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .frame(width: width)
     }
 
     private func sectionHeader(_ text: String) -> some View {
