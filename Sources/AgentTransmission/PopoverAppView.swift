@@ -12,11 +12,25 @@ struct PopoverAppView: View {
     let launchAtLogin: LaunchAtLoginController
     let onQuit: () -> Void
 
-    @State private var activeTab: PopoverTab = .gearbox
-    @State private var selectedGear: GearPosition = .first
+    @State private var activeTab: PopoverTab
+    @State private var selectedGear: GearPosition
     @State private var providerFilter: String = "__favorites__"
     @State private var searchText: String = ""
     @State private var launchError: String?
+
+    init(
+        model: AppModel,
+        launchAtLogin: LaunchAtLoginController,
+        initialTab: PopoverTab = .gearbox,
+        initialSelectedGear: GearPosition = .first,
+        onQuit: @escaping () -> Void
+    ) {
+        self.model = model
+        self.launchAtLogin = launchAtLogin
+        self._activeTab = State(initialValue: initialTab)
+        self._selectedGear = State(initialValue: initialSelectedGear)
+        self.onQuit = onQuit
+    }
 
     private var availableProviders: [String] {
         var seen = Set<String>()

@@ -193,7 +193,7 @@ final class FloatingHUDController {
     }
 }
 
-private struct FloatingShiftHUDView: View {
+struct FloatingShiftHUDView: View {
     @ObservedObject var state: FloatingHUDState
     let parkHintProvider: () -> String
     let onDismiss: () -> Void
