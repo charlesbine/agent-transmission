@@ -1,5 +1,5 @@
 import XCTest
-@testable import CodexTransmission
+@testable import AgentTransmission
 
 final class ReconnectBackoffTests: XCTestCase {
     func testDelayDoublesAndCapsAtThirtySeconds() {

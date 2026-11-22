@@ -1,6 +1,6 @@
 import XCTest
 @testable import AgentTransmissionCore
-@testable import CodexTransmission
+@testable import AgentTransmission
 
 final class FocusStatusSynchronizationTests: XCTestCase {
     func testRequestsStatusWhenTasksArriveAfterControlConnects() {

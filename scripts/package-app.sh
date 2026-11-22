@@ -2,13 +2,13 @@
 set -eu
 
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-APP_DIR="$PROJECT_DIR/dist/Codex Transmission.app"
+APP_DIR="$PROJECT_DIR/dist/Agent Transmission.app"
 PLIST="$PROJECT_DIR/Resources/Info.plist"
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")
-ARCHIVE="$PROJECT_DIR/dist/Codex-Transmission-$VERSION-macOS.zip"
-SIGN_IDENTITY=${CODEX_TRANSMISSION_SIGN_IDENTITY:--}
-STAGING_DIR=$(mktemp -d "${TMPDIR:-/tmp}/codex-transmission-package.XXXXXX")
-STAGED_APP="$STAGING_DIR/Codex Transmission.app"
+ARCHIVE="$PROJECT_DIR/dist/Agent-Transmission-$VERSION-macOS.zip"
+SIGN_IDENTITY=${AGENT_TRANSMISSION_SIGN_IDENTITY:-${CODEX_TRANSMISSION_SIGN_IDENTITY:--}}
+STAGING_DIR=$(mktemp -d "${TMPDIR:-/tmp}/agent-transmission-package.XXXXXX")
+STAGED_APP="$STAGING_DIR/Agent Transmission.app"
 CONTENTS_DIR="$STAGED_APP/Contents"
 trap 'rm -rf "$STAGING_DIR"' EXIT
 
@@ -17,8 +17,8 @@ swift build -c release
 
 mkdir -p "$CONTENTS_DIR/MacOS"
 mkdir -p "$CONTENTS_DIR/Resources"
-install -m 755 ".build/release/CodexTransmission" "$CONTENTS_DIR/MacOS/CodexTransmission"
-/usr/bin/strip -S "$CONTENTS_DIR/MacOS/CodexTransmission"
+install -m 755 ".build/release/AgentTransmission" "$CONTENTS_DIR/MacOS/AgentTransmission"
+/usr/bin/strip -S "$CONTENTS_DIR/MacOS/AgentTransmission"
 install -m 644 "$PLIST" "$CONTENTS_DIR/Info.plist"
 install -m 644 "LICENSE" "$CONTENTS_DIR/Resources/LICENSE.txt"
 install -m 644 "NOTICE" "$CONTENTS_DIR/Resources/NOTICE.txt"
