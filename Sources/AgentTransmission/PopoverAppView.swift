@@ -683,6 +683,30 @@ struct PopoverAppView: View {
                 .font(.system(size: 11.5))
                 .disabled(!model.bindings.showFloatingHUD)
 
+                bindingRow("Neutral HUD stays open") {
+                    Picker("", selection: Binding(
+                        get: { model.bindings.neutralHUDTimeout },
+                        set: { v in model.updateBindings { $0.neutralHUDTimeout = v } }
+                    )) {
+                        ForEach(NeutralHUDTimeout.allCases, id: \.self) { Text($0.displayLabel).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(width: 175)
+                }
+                .disabled(!model.bindings.showFloatingHUD || !model.bindings.showHUDOnNeutral)
+
+                bindingRow("Shift toast duration") {
+                    Picker("", selection: Binding(
+                        get: { model.bindings.engagedHUDTimeout },
+                        set: { v in model.updateBindings { $0.engagedHUDTimeout = v } }
+                    )) {
+                        ForEach(EngagedHUDTimeout.allCases, id: \.self) { Text($0.displayLabel).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(width: 175)
+                }
+                .disabled(!model.bindings.showFloatingHUD)
+
                 Toggle("Auto-sync 1–6 with T3 ★ Favorites", isOn: Binding(
                     get: { model.bindings.autoSyncFavorites },
                     set: { v in model.updateBindings { $0.autoSyncFavorites = v } }

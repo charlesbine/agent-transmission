@@ -351,6 +351,53 @@ public enum SequentialPaddleAction: String, Codable, CaseIterable, Sendable {
     }
 }
 
+public enum NeutralHUDTimeout: String, Codable, CaseIterable, Sendable {
+    case untilInGear
+    case seconds3
+    case seconds5
+    case seconds10
+
+    public var displayLabel: String {
+        switch self {
+        case .untilInGear: "Until back in gear"
+        case .seconds3: "3 seconds"
+        case .seconds5: "5 seconds"
+        case .seconds10: "10 seconds"
+        }
+    }
+
+    public var duration: TimeInterval? {
+        switch self {
+        case .untilInGear: nil
+        case .seconds3: 3.0
+        case .seconds5: 5.0
+        case .seconds10: 10.0
+        }
+    }
+}
+
+public enum EngagedHUDTimeout: String, Codable, CaseIterable, Sendable {
+    case fast
+    case normal
+    case long
+
+    public var displayLabel: String {
+        switch self {
+        case .fast: "1.0s"
+        case .normal: "1.5s"
+        case .long: "2.5s"
+        }
+    }
+
+    public var duration: TimeInterval {
+        switch self {
+        case .fast: 1.0
+        case .normal: 1.5
+        case .long: 2.5
+        }
+    }
+}
+
 public struct TransmissionBindings: Codable, Equatable, Sendable {
     public var gearboxMode: GearboxMode
     public var reverseAction: ReverseGearAction
@@ -362,6 +409,8 @@ public struct TransmissionBindings: Codable, Equatable, Sendable {
     public var sequentialAction: SequentialPaddleAction
     public var showFloatingHUD: Bool
     public var showHUDOnNeutral: Bool
+    public var neutralHUDTimeout: NeutralHUDTimeout
+    public var engagedHUDTimeout: EngagedHUDTimeout
     public var autoSyncFavorites: Bool
 
     public init(
@@ -375,6 +424,8 @@ public struct TransmissionBindings: Codable, Equatable, Sendable {
         sequentialAction: SequentialPaddleAction = .stepEffort,
         showFloatingHUD: Bool = true,
         showHUDOnNeutral: Bool = true,
+        neutralHUDTimeout: NeutralHUDTimeout = .untilInGear,
+        engagedHUDTimeout: EngagedHUDTimeout = .normal,
         autoSyncFavorites: Bool = false
     ) {
         self.gearboxMode = gearboxMode
@@ -387,7 +438,26 @@ public struct TransmissionBindings: Codable, Equatable, Sendable {
         self.sequentialAction = sequentialAction
         self.showFloatingHUD = showFloatingHUD
         self.showHUDOnNeutral = showHUDOnNeutral
+        self.neutralHUDTimeout = neutralHUDTimeout
+        self.engagedHUDTimeout = engagedHUDTimeout
         self.autoSyncFavorites = autoSyncFavorites
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        gearboxMode = (try? c.decodeIfPresent(GearboxMode.self, forKey: .gearboxMode)) ?? .models
+        reverseAction = (try? c.decodeIfPresent(ReverseGearAction.self, forKey: .reverseAction)) ?? .togglePlanMode
+        parkTapAction = (try? c.decodeIfPresent(ParkButtonAction.self, forKey: .parkTapAction)) ?? .parkingBrake
+        parkHoldAction = (try? c.decodeIfPresent(ParkButtonAction.self, forKey: .parkHoldAction)) ?? .toggleFastMode
+        parkChordLayer = (try? c.decodeIfPresent(ModifierLayerAction.self, forKey: .parkChordLayer)) ?? .effort
+        shiftModifierLayer = (try? c.decodeIfPresent(ModifierLayerAction.self, forKey: .shiftModifierLayer)) ?? .effort
+        optionModifierLayer = (try? c.decodeIfPresent(ModifierLayerAction.self, forKey: .optionModifierLayer)) ?? .permissions
+        sequentialAction = (try? c.decodeIfPresent(SequentialPaddleAction.self, forKey: .sequentialAction)) ?? .stepEffort
+        showFloatingHUD = (try? c.decodeIfPresent(Bool.self, forKey: .showFloatingHUD)) ?? true
+        showHUDOnNeutral = (try? c.decodeIfPresent(Bool.self, forKey: .showHUDOnNeutral)) ?? true
+        neutralHUDTimeout = (try? c.decodeIfPresent(NeutralHUDTimeout.self, forKey: .neutralHUDTimeout)) ?? .untilInGear
+        engagedHUDTimeout = (try? c.decodeIfPresent(EngagedHUDTimeout.self, forKey: .engagedHUDTimeout)) ?? .normal
+        autoSyncFavorites = (try? c.decodeIfPresent(Bool.self, forKey: .autoSyncFavorites)) ?? false
     }
 
     public static let t3Default = TransmissionBindings(

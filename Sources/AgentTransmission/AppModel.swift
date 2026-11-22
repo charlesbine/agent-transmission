@@ -74,7 +74,10 @@ struct ShiftHUDPayload: Equatable, Sendable {
     let slots: [HUDGateSlot]
     let reverseLabel: String
     let isError: Bool
-    let autoHideDelay: TimeInterval
+    /// `nil` means stay open until back in gear (or manually dismissed).
+    let autoHideDelay: TimeInterval?
+    /// True while a modifier key or (P) is currently held so the HUD stays pinned.
+    let modifierActive: Bool
 }
 
 final class AppModel: ObservableObject {
@@ -483,7 +486,7 @@ final class AppModel: ObservableObject {
 
     func previewDecisionHUD() {
         liveModifiers = modifierProvider()
-        emitDecisionHUD(force: true)
+        emitDecisionHUD(force: true, overrideTimeout: 5.0)
     }
 
     func hudSlots(for layer: GearLayer, highlighted: GearPosition? = nil) -> [HUDGateSlot] {
@@ -522,7 +525,7 @@ final class AppModel: ObservableObject {
                 return HUDGateSlot(
                     position: pos,
                     title: effort.shortLabel,
-                    subtitle: supported ? (live?.modelLabel ?? "Effort") : "Clamps",
+                    subtitle: supported ? (isCurrent ? "Active" : "Reasoning") : "Clamps",
                     accentHex: supported ? "#38BDF8" : "#64748B",
                     isActive: highlighted == pos,
                     isCurrentThreadValue: isCurrent
@@ -1086,12 +1089,17 @@ final class AppModel: ObservableObject {
 
     // MARK: - HUD Payload Builders
 
-    private func emitDecisionHUD(force: Bool = false) {
+    private var hasAnyActiveModifier: Bool {
+        liveModifiers.shift || liveModifiers.option || modifierHeld
+    }
+
+    private func emitDecisionHUD(force: Bool = false, overrideTimeout: TimeInterval? = nil) {
         guard force || bindings.showFloatingHUD else { return }
         let resolved = resolveActiveLayer()
         let live = currentThreadState
         let currentSummary = live.map { "\($0.modelLabel)\($0.effort.map { " · \($0.shortLabel)" } ?? "") · \($0.interactionMode.displayLabel)" }
             ?? "Select a gear"
+        let timeout: TimeInterval? = overrideTimeout ?? bindings.neutralHUDTimeout.duration
         let payload = ShiftHUDPayload(
             kind: .decision,
             layer: resolved.layer,
@@ -1102,7 +1110,8 @@ final class AppModel: ObservableObject {
             slots: hudSlots(for: resolved.layer, highlighted: nil),
             reverseLabel: reverseSlotLabel(),
             isError: false,
-            autoHideDelay: 4.5
+            autoHideDelay: timeout,
+            modifierActive: hasAnyActiveModifier
         )
         onHUDUpdate?(payload)
     }
@@ -1125,7 +1134,8 @@ final class AppModel: ObservableObject {
             slots: hudSlots(for: layer, highlighted: position),
             reverseLabel: reverseSlotLabel(),
             isError: false,
-            autoHideDelay: 1.4
+            autoHideDelay: bindings.engagedHUDTimeout.duration,
+            modifierActive: false
         )
         onHUDUpdate?(payload)
     }
@@ -1143,7 +1153,8 @@ final class AppModel: ObservableObject {
             slots: hudSlots(for: resolved.layer, highlighted: nil),
             reverseLabel: reverseSlotLabel(),
             isError: false,
-            autoHideDelay: 1.5
+            autoHideDelay: bindings.engagedHUDTimeout.duration,
+            modifierActive: false
         )
         onHUDUpdate?(payload)
     }
@@ -1151,17 +1162,19 @@ final class AppModel: ObservableObject {
     private func emitErrorHUD(headline: String, detail: String) {
         guard bindings.showFloatingHUD else { return }
         let resolved = resolveActiveLayer()
+        let contextPrefix = targetTask.map { "\($0.title): " } ?? ""
         let payload = ShiftHUDPayload(
             kind: .error,
             layer: resolved.layer,
             layerSourceLabel: nil,
             headline: headline,
-            detail: detail,
+            detail: "\(contextPrefix)\(detail)",
             threadTitle: targetTask?.title,
             slots: [],
             reverseLabel: reverseSlotLabel(),
             isError: true,
-            autoHideDelay: 2.2
+            autoHideDelay: 3.0,
+            modifierActive: false
         )
         onHUDUpdate?(payload)
     }

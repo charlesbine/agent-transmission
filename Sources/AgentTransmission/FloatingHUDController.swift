@@ -75,8 +75,8 @@ final class FloatingHUDController {
         hideWorkItem?.cancel()
 
         state.payload = payload
-        let targetWidth: CGFloat = payload.slots.isEmpty ? 380 : 668
-        let targetHeight: CGFloat = payload.slots.isEmpty ? 96 : 276
+        let targetWidth: CGFloat = payload.slots.isEmpty ? 460 : 684
+        let targetHeight: CGFloat = payload.slots.isEmpty ? 104 : 276
 
         let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) })
             ?? NSScreen.main
@@ -109,11 +109,15 @@ final class FloatingHUDController {
             stopModifierMonitors()
         }
 
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.dismiss()
+        // Stay open indefinitely if `autoHideDelay == nil` ("Until back in gear")
+        // OR while a modifier key / (P) is actively being held.
+        if let delay = payload.autoHideDelay, !payload.modifierActive {
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.dismiss()
+            }
+            hideWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
         }
-        hideWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + payload.autoHideDelay, execute: workItem)
     }
 
     private func dismiss() {
@@ -192,8 +196,9 @@ private struct FloatingShiftHUDView: View {
                     .lineLimit(1)
                 Text(payload.detail)
                     .font(.system(size: 11.5, weight: .medium))
-                    .foregroundColor(Color.white.opacity(0.65))
-                    .lineLimit(1)
+                    .foregroundColor(Color.white.opacity(0.72))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
@@ -266,25 +271,34 @@ private struct FloatingShiftHUDView: View {
                 onSelectSlot: nil
             )
 
-            // Footer hints / current state
-            HStack(spacing: 14) {
+            // Footer hints / current state (strictly single-line, never wraps)
+            HStack(spacing: 12) {
                 if payload.kind == .decision {
-                    Text("⇧ Shift → Effort")
-                    Text("⌥ Option → T3 Modes")
-                    Text("(P) → Park / Hold Fast")
+                    HStack(spacing: 10) {
+                        Text("⇧ Effort")
+                        Text("·").foregroundColor(Color.white.opacity(0.25))
+                        Text("⌥ Modes")
+                        Text("·").foregroundColor(Color.white.opacity(0.25))
+                        Text("(P) Park / Hold Fast")
+                    }
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                 } else {
                     Text(payload.detail)
                         .foregroundColor(Color.white.opacity(0.65))
+                        .lineLimit(1)
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 if payload.kind == .decision {
                     Text(payload.detail)
                         .foregroundColor(Color.white.opacity(0.68))
                         .lineLimit(1)
+                        .truncationMode(.tail)
+                        .layoutPriority(-1)
                 }
             }
             .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-            .foregroundColor(Color.white.opacity(0.46))
+            .foregroundColor(Color.white.opacity(0.48))
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 15)

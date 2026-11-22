@@ -1602,12 +1602,41 @@ final class T3CodeClient: T3CodeClientProtocol {
     private static func formatExitError(_ exit: Any?) -> String {
         guard let dict = exit as? JSON else { return "Unknown RPC failure" }
         let target = dict["cause"] ?? dict
+
+        // Unwrap Effect RPC failure envelopes: [{"_tag":"Fail","error":{"message":"..."}}]
+        if let extracted = extractReadableErrorMessage(from: target) {
+            return extracted
+        }
+
         if JSONSerialization.isValidJSONObject(target),
            let data = try? JSONSerialization.data(withJSONObject: target),
            let text = String(data: data, encoding: .utf8) {
-            return String(text.prefix(300))
+            return String(text.prefix(240))
         }
-        return String(describing: target).prefix(300).description
+        return String(describing: target).prefix(240).description
+    }
+
+    private static func extractReadableErrorMessage(from value: Any) -> String? {
+        if let array = value as? [Any] {
+            for item in array {
+                if let msg = extractReadableErrorMessage(from: item) { return msg }
+            }
+            return nil
+        }
+        guard let dict = value as? JSON else { return nil }
+        if let nested = dict["error"], let msg = extractReadableErrorMessage(from: nested) {
+            return msg
+        }
+        if let nested = dict["cause"], let msg = extractReadableErrorMessage(from: nested) {
+            return msg
+        }
+        if let message = dict["message"] as? String, !message.isEmpty {
+            return message
+        }
+        if let detail = dict["detail"] as? String, !detail.isEmpty {
+            return detail
+        }
+        return nil
     }
 
     private static func decodeJSONValue<T: Decodable>(_ raw: Any) -> T? {
