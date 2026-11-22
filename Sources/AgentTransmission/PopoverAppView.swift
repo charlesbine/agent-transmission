@@ -735,43 +735,16 @@ struct PopoverAppView: View {
         options: [T],
         selected: T,
         label: KeyPath<T, String>,
-        width: CGFloat = 224,
+        width: CGFloat = 232,
         onSelect: @escaping (T) -> Void
     ) -> some View {
-        Menu {
-            ForEach(options, id: \.self) { option in
-                Button {
-                    onSelect(option)
-                } label: {
-                    Text(option == selected ? "✓ \(option[keyPath: label])" : option[keyPath: label])
-                }
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(Color.white.opacity(0.5))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5.5)
-            .frame(width: width, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(Color.white.opacity(0.075))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .stroke(Color.white.opacity(0.11), lineWidth: 1)
-                    )
-            )
-        }
-        .menuStyle(.borderlessButton)
-        .frame(width: width)
+        NativePopUpButton(
+            options: options,
+            selected: selected,
+            label: { $0[keyPath: label] },
+            onSelect: onSelect
+        )
+        .frame(width: width, height: 24)
     }
 
     private func sectionHeader(_ text: String) -> some View {
@@ -819,5 +792,62 @@ struct PopoverAppView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+    }
+}
+
+/// Fixed-width native macOS NSPopUpButton wrapper so every dropdown in the Controls
+/// tab shares pixel-exact left and right edges without SwiftUI Menu/Picker centering bugs.
+private struct NativePopUpButton<T: Hashable>: NSViewRepresentable {
+    let options: [T]
+    let selected: T
+    let label: (T) -> String
+    let onSelect: (T) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+        button.controlSize = .regular
+        button.font = .systemFont(ofSize: 11.5, weight: .regular)
+        button.lineBreakMode = .byTruncatingTail
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.selectionChanged(_:))
+        button.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        sync(button)
+        return button
+    }
+
+    func updateNSView(_ button: NSPopUpButton, context: Context) {
+        context.coordinator.parent = self
+        sync(button)
+    }
+
+    private func sync(_ button: NSPopUpButton) {
+        let titles = options.map(label)
+        let currentTitles = (0..<button.numberOfItems).compactMap { button.itemTitle(at: $0) }
+        if currentTitles != titles {
+            button.removeAllItems()
+            button.addItems(withTitles: titles)
+        }
+        if let idx = options.firstIndex(of: selected), button.indexOfSelectedItem != idx {
+            button.selectItem(at: idx)
+        }
+    }
+
+    final class Coordinator: NSObject {
+        var parent: NativePopUpButton<T>
+
+        init(parent: NativePopUpButton<T>) {
+            self.parent = parent
+        }
+
+        @objc func selectionChanged(_ sender: NSPopUpButton) {
+            let idx = sender.indexOfSelectedItem
+            guard parent.options.indices.contains(idx) else { return }
+            parent.onSelect(parent.options[idx])
+        }
     }
 }

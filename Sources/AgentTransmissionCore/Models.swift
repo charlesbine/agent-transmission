@@ -279,7 +279,7 @@ public enum ModifierLayerAction: String, Codable, CaseIterable, Sendable {
         case .disabled: "Disabled"
         case .effort: "Effort (1=Low → 6=Ultra)"
         case .models: "Model Slots (1–6)"
-        case .permissions: "T3 Modes (Ask/Edits/Auto/Full/Plan/Code)"
+        case .permissions: "T3 Modes (Permissions & Plan)"
         }
     }
 }
