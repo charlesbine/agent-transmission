@@ -38,7 +38,7 @@ I ordered a NiTHO `GS-SH Gearshifter`, wired it straight into macOS IOKit USB HI
 The HUD stays completely out of your way while you code, then wakes up the instant your hand touches the shifter — non-activating, zero focus stealing, and click-through-friendly with a clickable `×` dismiss button:
 
 <p align="center">
-  <img src="docs/assets/macos-hud-in-action.png" alt="Agent Transmission Floating Shift HUD in action on macOS — Neutral Decision HUD floating below T3 Code with live H-gate N icon in the macOS menu bar" width="100%" />
+  <img src="docs/assets/macos-hud-in-action.png" alt="Agent Transmission Floating Shift HUD in action on macOS — Neutral Decision HUD floating over macOS Sonoma Dark with zoomed 44 pt fixed-width H-gate N icon in the macOS menu bar" width="100%" />
 </p>
 
 <p align="center">
@@ -58,7 +58,7 @@ The HUD stays completely out of your way while you code, then wakes up the insta
 Clicking the fixed-width H-gate icon in your macOS menu bar opens a persistent dark SwiftUI popover that stays open while you map gears, inspect live state, or switch targets — with zero menu-bar jitter as you shift:
 
 <p align="center">
-  <img src="docs/assets/macos-menubar-popover.png" alt="Agent Transmission macOS menu bar with highlighted H-gate 4 icon and persistent SwiftUI popover anchored underneath alongside T3 Code" width="100%" />
+  <img src="docs/assets/macos-menubar-popover.png" alt="Agent Transmission macOS menu bar with highlighted H-gate 4 icon and persistent SwiftUI popover anchored directly underneath on macOS Sonoma Dark" width="100%" />
 </p>
 
 <p align="center">
@@ -80,7 +80,7 @@ Clicking the fixed-width H-gate icon in your macOS menu bar opens a persistent d
 
 https://github.com/user-attachments/assets/9548d44b-e48f-4e01-b5ed-2294c923b9d5
 
-Left: stabilized phone footage of the physical NiTHO GS-SH shifter and laptop display. Right: matching screen capture showing direct H-pattern shifts, software parking brake, sequential effort stepping, and Fast mode. [Download the MP4](docs/assets/agent-transmission-demo.mp4).
+Left: real stabilized phone footage (with mechanical shifter audio) of the physical NiTHO GS-SH H-pattern shifter clamped to my desk. Right: the updated [Agent Transmission 2.0 MP4](docs/assets/agent-transmission-demo.mp4) pairs those exact physical throws with the real SwiftUI Floating Shift HUD, live `H-gate` menu-bar indicator, and Orchestration V2 WS RPC dispatches.
 
 ---
 
