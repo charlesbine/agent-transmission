@@ -310,19 +310,43 @@ struct HGateDiagramView: View {
                 HStack(spacing: 5) {
                     Text(slot.position.label)
                         .font(.system(size: isHUD ? 11.5 : 10, weight: .bold, design: .monospaced))
-                        .foregroundColor((isEngaged || isEditing) ? .black : accent)
+                        .foregroundColor(isEngaged ? .black : accent)
                         .frame(width: isHUD ? 22 : 17, height: isHUD ? 22 : 17)
                         .background(
                             RoundedRectangle(cornerRadius: isHUD ? 6 : 4, style: .continuous)
-                                .fill((isEngaged || isEditing) ? accent : accent.opacity(0.18))
+                                .fill(isEngaged ? accent : accent.opacity(0.18))
                         )
 
                     Spacer(minLength: 0)
 
-                    if isEngaged {
-                        Text("LIVE")
-                            .font(.system(size: isHUD ? 8.5 : 7.5, weight: .bold, design: .monospaced))
-                            .foregroundColor(accent)
+                    if isEngaged && isEditing {
+                        HStack(spacing: 3) {
+                            Circle().fill(accent).frame(width: 5, height: 5)
+                            Text("LIVE")
+                                .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                                .foregroundColor(accent)
+                            Image(systemName: "pencil")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(.white.opacity(0.85))
+                        }
+                    } else if isEngaged {
+                        HStack(spacing: 3) {
+                            Circle().fill(accent).frame(width: isHUD ? 6 : 5, height: isHUD ? 6 : 5)
+                            Text("LIVE")
+                                .font(.system(size: isHUD ? 8.5 : 7.5, weight: .bold, design: .monospaced))
+                                .foregroundColor(accent)
+                        }
+                    } else if isEditing {
+                        HStack(spacing: 2.5) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 7.5, weight: .bold))
+                            Text("EDIT")
+                                .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                        }
+                        .foregroundColor(.white.opacity(0.88))
+                        .padding(.horizontal, 4.5)
+                        .padding(.vertical, 1.5)
+                        .background(Capsule().fill(Color.white.opacity(0.14)))
                     } else if slot.isCurrentThreadValue {
                         Circle()
                             .fill(accent)
@@ -352,16 +376,40 @@ struct HGateDiagramView: View {
                     .fill(Self.cardBase)
                     .overlay(
                         RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
-                            .fill(isEngaged ? accent.opacity(0.24) : (isEditing ? accent.opacity(0.16) : Color.clear))
+                            .fill(isEngaged ? accent.opacity(0.24) : (isEditing ? Color.white.opacity(0.06) : Color.clear))
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
-                            .stroke(
-                                (isEngaged || isEditing)
-                                    ? accent
-                                    : (slot.isCurrentThreadValue ? accent.opacity(0.5) : Color.white.opacity(0.10)),
-                                lineWidth: (isEngaged || isEditing) ? 1.75 : 1
-                            )
+                        Group {
+                            if isEngaged {
+                                RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
+                                    .stroke(accent, lineWidth: 1.75)
+                            } else if isEditing {
+                                RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
+                                    .stroke(
+                                        Color.white.opacity(0.82),
+                                        style: StrokeStyle(lineWidth: 1.4, dash: [4.5, 3])
+                                    )
+                            } else {
+                                RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
+                                    .stroke(
+                                        slot.isCurrentThreadValue ? accent.opacity(0.5) : Color.white.opacity(0.10),
+                                        lineWidth: 1
+                                    )
+                            }
+                        }
+                    )
+                    .overlay(
+                        // When editing the exact slot that is also physically engaged, add an outer dashed focus ring
+                        Group {
+                            if isEngaged && isEditing {
+                                RoundedRectangle(cornerRadius: isHUD ? 13 : 10, style: .continuous)
+                                    .stroke(
+                                        Color.white.opacity(0.75),
+                                        style: StrokeStyle(lineWidth: 1.25, dash: [4, 3])
+                                    )
+                                    .padding(-2.5)
+                            }
+                        }
                     )
             )
 
@@ -388,17 +436,41 @@ struct HGateDiagramView: View {
             HStack(spacing: 5) {
                 Text("R")
                     .font(.system(size: isHUD ? 11.5 : 10, weight: .bold, design: .monospaced))
-                    .foregroundColor((isEngaged || isEditing) ? .black : tint)
+                    .foregroundColor(isEngaged ? .black : tint)
                     .frame(width: isHUD ? 22 : 17, height: isHUD ? 22 : 17)
                     .background(
                         RoundedRectangle(cornerRadius: isHUD ? 6 : 4, style: .continuous)
-                            .fill((isEngaged || isEditing) ? tint : tint.opacity(0.2))
+                            .fill(isEngaged ? tint : tint.opacity(0.2))
                     )
                 Spacer(minLength: 0)
-                if isEngaged {
-                    Text("LIVE")
-                        .font(.system(size: isHUD ? 8.5 : 7.5, weight: .bold, design: .monospaced))
-                        .foregroundColor(tint)
+                if isEngaged && isEditing {
+                    HStack(spacing: 3) {
+                        Circle().fill(tint).frame(width: 5, height: 5)
+                        Text("LIVE")
+                            .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                            .foregroundColor(tint)
+                        Image(systemName: "pencil")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.white.opacity(0.85))
+                    }
+                } else if isEngaged {
+                    HStack(spacing: 3) {
+                        Circle().fill(tint).frame(width: isHUD ? 6 : 5, height: isHUD ? 6 : 5)
+                        Text("LIVE")
+                            .font(.system(size: isHUD ? 8.5 : 7.5, weight: .bold, design: .monospaced))
+                            .foregroundColor(tint)
+                    }
+                } else if isEditing {
+                    HStack(spacing: 2.5) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 7.5, weight: .bold))
+                        Text("EDIT")
+                            .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                    }
+                    .foregroundColor(.white.opacity(0.88))
+                    .padding(.horizontal, 4.5)
+                    .padding(.vertical, 1.5)
+                    .background(Capsule().fill(Color.white.opacity(0.14)))
                 }
             }
 
@@ -421,11 +493,36 @@ struct HGateDiagramView: View {
                 .fill(Self.cardBase)
                 .overlay(
                     RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
-                        .fill(isEngaged ? tint.opacity(0.24) : (isEditing ? tint.opacity(0.16) : Color.clear))
+                        .fill(isEngaged ? tint.opacity(0.24) : (isEditing ? Color.white.opacity(0.06) : Color.clear))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
-                        .stroke((isEngaged || isEditing) ? tint : Color.white.opacity(0.10), lineWidth: (isEngaged || isEditing) ? 1.75 : 1)
+                    Group {
+                        if isEngaged {
+                            RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
+                                .stroke(tint, lineWidth: 1.75)
+                        } else if isEditing {
+                            RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
+                                .stroke(
+                                    Color.white.opacity(0.82),
+                                    style: StrokeStyle(lineWidth: 1.4, dash: [4.5, 3])
+                                )
+                        } else {
+                            RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
+                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        }
+                    }
+                )
+                .overlay(
+                    Group {
+                        if isEngaged && isEditing {
+                            RoundedRectangle(cornerRadius: isHUD ? 13 : 10, style: .continuous)
+                                .stroke(
+                                    Color.white.opacity(0.75),
+                                    style: StrokeStyle(lineWidth: 1.25, dash: [4, 3])
+                                )
+                                .padding(-2.5)
+                        }
+                    }
                 )
         )
 
