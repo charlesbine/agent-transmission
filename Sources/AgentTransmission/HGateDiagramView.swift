@@ -105,6 +105,8 @@ struct HGateDiagramView: View {
 
     private var isHUD: Bool { style == .hud }
 
+    private static let cardBase = Color(red: 0.095, green: 0.112, blue: 0.148)
+
     private var columnSpacing: CGFloat { isHUD ? 12 : 7 }
     private var cardHeight: CGFloat { isHUD ? 72 : 50 }
     private var channelHeight: CGFloat { isHUD ? 44 : 22 }
@@ -348,10 +350,11 @@ struct HGateDiagramView: View {
             .frame(maxWidth: .infinity, minHeight: cardHeight, maxHeight: cardHeight, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
-                    .fill(
-                        isEngaged
-                            ? accent.opacity(0.24)
-                            : (isEditing ? accent.opacity(0.16) : Color(red: 0.095, green: 0.112, blue: 0.148))
+                    // Opaque base so the H-rail drawn behind never bleeds through the tint
+                    .fill(Self.cardBase)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
+                            .fill(isEngaged ? accent.opacity(0.24) : (isEditing ? accent.opacity(0.16) : Color.clear))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
@@ -412,10 +415,10 @@ struct HGateDiagramView: View {
         .frame(maxWidth: .infinity, minHeight: cardHeight, maxHeight: cardHeight, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
-                .fill(
-                    isEngaged
-                        ? tint.opacity(0.24)
-                        : (isEditing ? tint.opacity(0.16) : Color(red: 0.095, green: 0.112, blue: 0.148))
+                .fill(Self.cardBase)
+                .overlay(
+                    RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
+                        .fill(isEngaged ? tint.opacity(0.24) : (isEditing ? tint.opacity(0.16) : Color.clear))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
