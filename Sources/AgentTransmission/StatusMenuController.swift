@@ -9,15 +9,18 @@ final class StatusMenuController: NSObject {
     private let popover: NSPopover
     private var clickOutsideMonitor: Any?
 
+    // Fixed width prevents macOS menu-bar jitter when switching models or threads.
+    private static let fixedStatusItemLength: CGFloat = 44
+
     init(model: AppModel) {
         self.model = model
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: Self.fixedStatusItemLength)
         popover = NSPopover()
         super.init()
 
         popover.behavior = .transient
         popover.animates = true
-        popover.contentSize = NSSize(width: 396, height: 610)
+        popover.contentSize = NSSize(width: 432, height: 636)
         popover.contentViewController = NSHostingController(
             rootView: PopoverAppView(
                 model: model,
@@ -27,6 +30,9 @@ final class StatusMenuController: NSObject {
         )
 
         if let button = statusItem.button {
+            button.imagePosition = .imageLeading
+            button.imageHugsTitle = true
+            button.font = .monospacedSystemFont(ofSize: 11.5, weight: .semibold)
             button.target = self
             button.action = #selector(handleStatusBarClick(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -43,30 +49,38 @@ final class StatusMenuController: NSObject {
     }
 
     private func refresh() {
-        let gear: String
+        guard let button = statusItem.button else { return }
+
+        let gearCode: String
         if model.modifierHeld {
-            gear = "P…"
+            gearCode = "P"
         } else if model.parked {
-            gear = "🅿"
+            gearCode = "P"
         } else if model.inNeutral {
-            gear = "N"
+            gearCode = "N"
         } else {
-            gear = model.lastGear?.label ?? "N"
+            gearCode = model.lastGear?.label ?? "N"
         }
 
-        let liveLabel: String
+        button.image = HGateStatusBarIcon.render(
+            gear: model.lastGear,
+            parked: model.parked || model.modifierHeld,
+            inNeutral: model.inNeutral,
+            connected: model.targetControlConnected
+        )
+        button.title = " \(gearCode)"
+
+        let modelDesc: String
         if let preset = model.currentPreset {
-            liveLabel = " · \(preset.name) \(preset.effort.shortLabel)"
+            modelDesc = preset.displayLabel
         } else if let live = model.currentThreadState, !live.modelLabel.isEmpty {
-            let eff = live.effort.map { " \($0.shortLabel)" } ?? ""
-            liveLabel = " · \(live.modelLabel)\(eff)"
+            modelDesc = "\(live.modelLabel)\(live.effort.map { " · \($0.shortLabel)" } ?? "")"
         } else {
-            liveLabel = ""
+            modelDesc = model.status
         }
-
-        let speed = model.fastMode ? " · ⚡︎" : ""
-        statusItem.button?.title = "\(gear)\(liveLabel)\(speed)"
-        statusItem.button?.toolTip = model.status
+        let fastTag = model.fastMode ? " · ⚡ Fast" : ""
+        let parkTag = model.parked ? " · Parked" : ""
+        button.toolTip = "Agent Transmission [\(gearCode)] · \(modelDesc)\(fastTag)\(parkTag)"
     }
 
     @objc private func handleStatusBarClick(_ sender: AnyObject?) {

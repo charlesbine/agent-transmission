@@ -81,7 +81,7 @@ struct PopoverAppView: View {
             Divider().overlay(Color.white.opacity(0.08))
             footerBar
         }
-        .frame(width: 396, height: 610)
+        .frame(width: 432, height: 636)
         .background(Color(red: 0.065, green: 0.078, blue: 0.102))
         .preferredColorScheme(.dark)
     }
@@ -359,35 +359,33 @@ struct PopoverAppView: View {
     }
 
     private var interactiveHGate: some View {
-        let slots = model.hudSlots(for: model.bindings.gearboxMode == .effort ? .effort : (model.bindings.gearboxMode == .custom ? .custom : .models), highlighted: model.lastGear)
-        let top = [1, 3, 5].compactMap { idx in slots.first(where: { $0.position.rawValue == idx }) }
-        let bottom = [2, 4, 6].compactMap { idx in slots.first(where: { $0.position.rawValue == idx }) }
-
-        return VStack(spacing: 5) {
-            HStack(spacing: 6) {
-                ForEach(top) { slot in
-                    gateButton(slot)
-                }
-                Spacer().frame(width: 78)
+        let activeLayer: GearLayer = model.bindings.gearboxMode == .effort
+            ? .effort
+            : (model.bindings.gearboxMode == .custom ? .custom : .models)
+        let slots = model.hudSlots(for: activeLayer, highlighted: model.lastGear)
+        let accent: Color = {
+            switch activeLayer {
+            case .models: Color(hex: "#38BDF8")
+            case .effort: Color(hex: "#A78BFA")
+            case .permissions: Color(hex: "#F59E0B")
+            case .custom: Color(hex: "#10B981")
             }
+        }()
 
-            HStack(spacing: 6) {
-                Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
-                Text(model.inNeutral ? "NEUTRAL" : "H-GATE · CLICK SLOT TO EDIT")
-                    .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
-                    .foregroundColor(model.inNeutral ? Color(hex: "#38BDF8") : Color.white.opacity(0.35))
-                Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
+        return HGateDiagramView(
+            style: .popover,
+            slots: slots,
+            reverseTitle: model.bindings.reverseAction.shortLabel,
+            reverseSubtitle: "Reverse",
+            activeGear: model.lastGear,
+            editingGear: selectedGear,
+            isNeutral: model.inNeutral,
+            layerAccent: accent,
+            onSelectSlot: { pos in
+                selectedGear = pos
             }
-            .padding(.horizontal, 4)
-
-            HStack(spacing: 6) {
-                ForEach(bottom) { slot in
-                    gateButton(slot)
-                }
-                reverseGateButton
-            }
-        }
-        .padding(9)
+        )
+        .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.black.opacity(0.32))
@@ -396,96 +394,6 @@ struct PopoverAppView: View {
                         .stroke(Color.white.opacity(0.08), lineWidth: 1)
                 )
         )
-    }
-
-    private func gateButton(_ slot: HUDGateSlot) -> some View {
-        let isEditing = selectedGear == slot.position
-        let accent = Color(hex: slot.accentHex)
-        return Button {
-            selectedGear = slot.position
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(slot.position.label)
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(isEditing ? .black : accent)
-                        .frame(width: 16, height: 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(isEditing ? accent : accent.opacity(0.18))
-                        )
-                    Spacer(minLength: 0)
-                    if slot.isActive {
-                        Circle()
-                            .fill(Color(hex: "#10B981"))
-                            .frame(width: 6, height: 6)
-                    }
-                }
-                Text(slot.title)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                Text(slot.subtitle ?? "")
-                    .font(.system(size: 9))
-                    .foregroundColor(Color.white.opacity(0.48))
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isEditing ? accent.opacity(0.16) : Color.white.opacity(0.045))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(isEditing ? accent : Color.white.opacity(0.08), lineWidth: isEditing ? 1.5 : 1)
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var reverseGateButton: some View {
-        let isEditing = selectedGear == .reverse
-        let tint = Color(hex: "#F59E0B")
-        let label = model.bindings.reverseAction.shortLabel
-        return Button {
-            selectedGear = .reverse
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text("R")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(isEditing ? .black : tint)
-                        .frame(width: 16, height: 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(isEditing ? tint : tint.opacity(0.2))
-                        )
-                    Spacer(minLength: 0)
-                }
-                Text(label)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                Text("Reverse")
-                    .font(.system(size: 8.5))
-                    .foregroundColor(Color.white.opacity(0.45))
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 6)
-            .frame(width: 78, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isEditing ? tint.opacity(0.16) : Color.white.opacity(0.04))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(isEditing ? tint : Color.white.opacity(0.08), lineWidth: isEditing ? 1.5 : 1)
-                    )
-            )
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Inline Gear Inspector
