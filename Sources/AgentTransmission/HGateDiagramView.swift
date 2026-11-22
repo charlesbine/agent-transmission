@@ -106,7 +106,7 @@ struct HGateDiagramView: View {
     private var isHUD: Bool { style == .hud }
 
     private var columnSpacing: CGFloat { isHUD ? 12 : 8 }
-    private var cardHeight: CGFloat { isHUD ? 58 : 48 }
+    private var cardHeight: CGFloat { isHUD ? 72 : 58 }
     private var channelHeight: CGFloat { isHUD ? 44 : 30 }
 
     private func slot(at index: Int) -> HUDGateSlot? {
@@ -150,8 +150,8 @@ struct HGateDiagramView: View {
                 CGFloat(idx) * (colW + columnSpacing) + colW / 2
             }
 
-            let topEdgeY = cardHeight - 2
-            let botEdgeY = h - cardHeight + 2
+            let topEdgeY = cardHeight
+            let botEdgeY = h - cardHeight
             let midY = h / 2
             let trackWidth: CGFloat = isHUD ? 7 : 5
             let innerWidth: CGFloat = isHUD ? 3 : 2
@@ -306,10 +306,10 @@ struct HGateDiagramView: View {
             let isEngaged = activeGear == slot.position && !isNeutral
             let accent = Color(hex: slot.accentHex)
 
-            let card = VStack(alignment: .leading, spacing: isHUD ? 4 : 2) {
+            let card = VStack(alignment: .leading, spacing: isHUD ? 5 : 3) {
                 HStack(spacing: 5) {
                     Text(slot.position.label)
-                        .font(.system(size: isHUD ? 12 : 10, weight: .bold, design: .monospaced))
+                        .font(.system(size: isHUD ? 11.5 : 10, weight: .bold, design: .monospaced))
                         .foregroundColor((isEngaged || isEditing) ? .black : accent)
                         .frame(width: isHUD ? 22 : 17, height: isHUD ? 22 : 17)
                         .background(
@@ -331,7 +331,7 @@ struct HGateDiagramView: View {
                 }
 
                 Text(slot.title)
-                    .font(.system(size: isHUD ? 13 : 10.5, weight: .semibold))
+                    .font(.system(size: isHUD ? 12.5 : 10.5, weight: .semibold))
                     .foregroundColor(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -343,10 +343,9 @@ struct HGateDiagramView: View {
                         .lineLimit(1)
                 }
             }
-            .padding(.horizontal, isHUD ? 11 : 8)
-            .padding(.vertical, isHUD ? 8 : 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: cardHeight)
+            .padding(.horizontal, isHUD ? 12 : 9)
+            .padding(.vertical, isHUD ? 10 : 7)
+            .frame(maxWidth: .infinity, minHeight: cardHeight, maxHeight: cardHeight, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
                     .fill(
@@ -384,10 +383,10 @@ struct HGateDiagramView: View {
         let isEngaged = activeGear == .reverse && !isNeutral
         let tint = Color(hex: "#F59E0B")
 
-        let card = VStack(alignment: .leading, spacing: isHUD ? 4 : 2) {
+        let card = VStack(alignment: .leading, spacing: isHUD ? 5 : 3) {
             HStack(spacing: 5) {
                 Text("R")
-                    .font(.system(size: isHUD ? 12 : 10, weight: .bold, design: .monospaced))
+                    .font(.system(size: isHUD ? 11.5 : 10, weight: .bold, design: .monospaced))
                     .foregroundColor((isEngaged || isEditing) ? .black : tint)
                     .frame(width: isHUD ? 22 : 17, height: isHUD ? 22 : 17)
                     .background(
@@ -398,7 +397,7 @@ struct HGateDiagramView: View {
             }
 
             Text(reverseTitle)
-                .font(.system(size: isHUD ? 13 : 10.5, weight: .semibold))
+                .font(.system(size: isHUD ? 12.5 : 10.5, weight: .semibold))
                 .foregroundColor(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
@@ -408,10 +407,9 @@ struct HGateDiagramView: View {
                 .foregroundColor(Color.white.opacity(0.5))
                 .lineLimit(1)
         }
-        .padding(.horizontal, isHUD ? 11 : 8)
-        .padding(.vertical, isHUD ? 8 : 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: cardHeight)
+        .padding(.horizontal, isHUD ? 12 : 9)
+        .padding(.vertical, isHUD ? 10 : 7)
+        .frame(maxWidth: .infinity, minHeight: cardHeight, maxHeight: cardHeight, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: isHUD ? 11 : 8, style: .continuous)
                 .fill(

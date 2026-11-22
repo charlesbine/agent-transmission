@@ -75,8 +75,8 @@ final class FloatingHUDController {
         hideWorkItem?.cancel()
 
         state.payload = payload
-        let targetWidth: CGFloat = payload.slots.isEmpty ? 460 : 684
-        let targetHeight: CGFloat = payload.slots.isEmpty ? 104 : 276
+        let targetWidth: CGFloat = payload.slots.isEmpty ? 460 : 696
+        let targetHeight: CGFloat = payload.slots.isEmpty ? 104 : 306
 
         let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) })
             ?? NSScreen.main

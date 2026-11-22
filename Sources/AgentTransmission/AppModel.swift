@@ -506,9 +506,16 @@ final class AppModel: ObservableObject {
                 let sub = layer == .custom
                     ? preset.effort.shortLabel
                     : (summary?.providerLabel ?? preset.effort.shortLabel)
+                let cleanTitle: String = {
+                    if let providerLabel = summary?.providerLabel,
+                       preset.name.hasSuffix(" (\(providerLabel))") {
+                        return String(preset.name.dropLast(" (\(providerLabel))".count))
+                    }
+                    return preset.name
+                }()
                 return HUDGateSlot(
                     position: pos,
-                    title: preset.name,
+                    title: cleanTitle,
                     subtitle: sub,
                     accentHex: accent,
                     isActive: highlighted == pos,
@@ -1124,12 +1131,13 @@ final class AppModel: ObservableObject {
         task: AgentTask
     ) {
         guard bindings.showFloatingHUD else { return }
+        let modeHint = currentThreadState.map { "\($0.interactionMode.displayLabel) · \($0.runtimeMode.shortLabel)" } ?? ""
         let payload = ShiftHUDPayload(
             kind: .engaged(position),
             layer: layer,
             layerSourceLabel: source,
             headline: "[\(position.label)] \(preset.displayLabel)",
-            detail: task.title,
+            detail: modeHint.isEmpty ? task.title : "\(preset.effort.shortLabel) · \(modeHint)",
             threadTitle: task.title,
             slots: hudSlots(for: layer, highlighted: position),
             reverseLabel: reverseSlotLabel(),
