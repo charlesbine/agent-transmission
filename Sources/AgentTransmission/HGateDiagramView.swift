@@ -397,6 +397,11 @@ struct HGateDiagramView: View {
                             .fill((isEngaged || isEditing) ? tint : tint.opacity(0.2))
                     )
                 Spacer(minLength: 0)
+                if isEngaged {
+                    Text("LIVE")
+                        .font(.system(size: isHUD ? 8.5 : 7.5, weight: .bold, design: .monospaced))
+                        .foregroundColor(tint)
+                }
             }
 
             Text(reverseTitle)

@@ -80,11 +80,14 @@ final class TransmissionV2Tests: XCTestCase {
         surface.emit([.selectPosition(.fifth)])
         XCTAssertEqual(target.lastInteractionMode, .plan)
 
-        // 4. Reverse (default on T3: toggle Plan <-> Code)
+        // 4. Reverse (default on T3: toggle Plan <-> Code) highlights Reverse on the HUD
+        var hudEvents: [ShiftHUDPayload] = []
+        model.onHUDUpdate = { hudEvents.append($0) }
         currentMods = ActiveKeyboardModifiers()
         target.liveInteractionMode = .plan
         surface.emit([.selectPosition(.reverse)])
         XCTAssertEqual(target.lastInteractionMode, .defaultMode)
+        XCTAssertEqual(hudEvents.last?.kind, .engaged(.reverse))
     }
 
     func testSyncFromFavoritesAndSortFastToSmart() {

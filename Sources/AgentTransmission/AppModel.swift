@@ -586,13 +586,13 @@ final class AppModel: ObservableObject {
         publish()
     }
 
-    func toggleFastMode() {
+    func toggleFastMode(fromGear: GearPosition? = nil) {
         fastMode.toggle()
         defaults.set(fastMode, forKey: Self.fastModeKey)
-        applyFastMode()
+        applyFastMode(fromGear: fromGear)
     }
 
-    func togglePlanMode() {
+    func togglePlanMode(fromGear: GearPosition? = nil) {
         guard let targetTask else {
             status = "No \(agentTarget.name) task available"
             publish()
@@ -600,10 +600,16 @@ final class AppModel: ObservableObject {
         }
         let currentlyPlan = currentThreadState?.interactionMode == .plan
         let next: AgentInteractionMode = currentlyPlan ? .defaultMode : .plan
-        setInteractionMode(next, on: targetTask)
+        setInteractionMode(next, on: targetTask, fromGear: fromGear)
     }
 
-    func setInteractionMode(_ mode: AgentInteractionMode, on task: AgentTask? = nil) {
+    func setInteractionMode(
+        _ mode: AgentInteractionMode,
+        on task: AgentTask? = nil,
+        fromGear: GearPosition? = nil,
+        layer: GearLayer? = nil,
+        source: String? = nil
+    ) {
         guard let task = task ?? targetTask else {
             status = "No \(agentTarget.name) task available"
             publish()
@@ -622,10 +628,14 @@ final class AppModel: ObservableObject {
             switch result {
             case .success:
                 self.status = "\(task.title) · \(mode.displayLabel) mode"
+                let hudKind: ShiftHUDKind = fromGear.map { .engaged($0) } ?? .action(badge: mode == .plan ? "PLAN" : "CODE")
+                let headline = fromGear.map { "[\($0.label)] \(mode.displayLabel) Mode" } ?? "\(mode.displayLabel) Mode"
                 self.emitActionHUD(
-                    kind: .action(badge: mode == .plan ? "PLAN" : "CODE"),
-                    headline: "\(mode.displayLabel) Mode",
-                    detail: task.title
+                    kind: hudKind,
+                    headline: headline,
+                    detail: task.title,
+                    layerOverride: layer,
+                    sourceOverride: source ?? (fromGear == .reverse ? "REVERSE" : nil)
                 )
             case let .failure(error):
                 self.status = error.localizedDescription
@@ -635,7 +645,13 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func setRuntimeMode(_ mode: AgentRuntimeMode, on task: AgentTask? = nil) {
+    func setRuntimeMode(
+        _ mode: AgentRuntimeMode,
+        on task: AgentTask? = nil,
+        fromGear: GearPosition? = nil,
+        layer: GearLayer? = nil,
+        source: String? = nil
+    ) {
         guard let task = task ?? targetTask else {
             status = "No \(agentTarget.name) task available"
             publish()
@@ -654,10 +670,14 @@ final class AppModel: ObservableObject {
             switch result {
             case .success:
                 self.status = "\(task.title) · \(mode.displayLabel)"
+                let hudKind: ShiftHUDKind = fromGear.map { .engaged($0) } ?? .action(badge: mode.shortLabel.uppercased())
+                let headline = fromGear.map { "[\($0.label)] Permission → \(mode.displayLabel)" } ?? "Permission → \(mode.displayLabel)"
                 self.emitActionHUD(
-                    kind: .action(badge: mode.shortLabel.uppercased()),
-                    headline: "Permission → \(mode.displayLabel)",
-                    detail: task.title
+                    kind: hudKind,
+                    headline: headline,
+                    detail: task.title,
+                    layerOverride: layer,
+                    sourceOverride: source
                 )
             case let .failure(error):
                 self.status = error.localizedDescription
@@ -667,7 +687,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func interruptActiveRun() {
+    func interruptActiveRun(fromGear: GearPosition? = nil) {
         guard let targetTask else {
             status = "No \(agentTarget.name) task available"
             publish()
@@ -679,10 +699,13 @@ final class AppModel: ObservableObject {
             switch result {
             case .success:
                 self.status = "Interrupted \(targetTask.title)"
+                let hudKind: ShiftHUDKind = fromGear.map { .engaged($0) } ?? .action(badge: "STOP")
+                let headline = fromGear.map { "[\($0.label)] Run Interrupted" } ?? "Run Interrupted"
                 self.emitActionHUD(
-                    kind: .action(badge: "STOP"),
-                    headline: "Run Interrupted",
-                    detail: targetTask.title
+                    kind: hudKind,
+                    headline: headline,
+                    detail: targetTask.title,
+                    sourceOverride: fromGear == .reverse ? "REVERSE" : nil
                 )
             case let .failure(error):
                 self.status = error.localizedDescription
@@ -692,7 +715,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func settleCurrentTask() {
+    func settleCurrentTask(fromGear: GearPosition? = nil) {
         guard let targetTask else {
             status = "No \(agentTarget.name) task available"
             publish()
@@ -704,10 +727,13 @@ final class AppModel: ObservableObject {
             switch result {
             case .success:
                 self.status = "Settled \(targetTask.title)"
+                let hudKind: ShiftHUDKind = fromGear.map { .engaged($0) } ?? .action(badge: "SETTLED")
+                let headline = fromGear.map { "[\($0.label)] Thread Settled" } ?? "Thread Settled"
                 self.emitActionHUD(
-                    kind: .action(badge: "SETTLED"),
-                    headline: "Thread Settled",
-                    detail: targetTask.title
+                    kind: hudKind,
+                    headline: headline,
+                    detail: targetTask.title,
+                    sourceOverride: fromGear == .reverse ? "REVERSE" : nil
                 )
             case let .failure(error):
                 self.status = error.localizedDescription
@@ -882,12 +908,12 @@ final class AppModel: ObservableObject {
 
         case .permissions:
             switch gearIndex {
-            case 1: setRuntimeMode(.approvalRequired)
-            case 2: setRuntimeMode(.autoAcceptEdits)
-            case 3: setRuntimeMode(.auto)
-            case 4: setRuntimeMode(.fullAccess)
-            case 5: setInteractionMode(.plan)
-            case 6: setInteractionMode(.defaultMode)
+            case 1: setRuntimeMode(.approvalRequired, fromGear: position, layer: .permissions, source: resolved.source)
+            case 2: setRuntimeMode(.autoAcceptEdits, fromGear: position, layer: .permissions, source: resolved.source)
+            case 3: setRuntimeMode(.auto, fromGear: position, layer: .permissions, source: resolved.source)
+            case 4: setRuntimeMode(.fullAccess, fromGear: position, layer: .permissions, source: resolved.source)
+            case 5: setInteractionMode(.plan, fromGear: position, layer: .permissions, source: resolved.source)
+            case 6: setInteractionMode(.defaultMode, fromGear: position, layer: .permissions, source: resolved.source)
             default: break
             }
         }
@@ -896,17 +922,17 @@ final class AppModel: ObservableObject {
     private func executeReverseAction() {
         switch bindings.reverseAction {
         case .togglePlanMode:
-            togglePlanMode()
+            togglePlanMode(fromGear: .reverse)
         case .interruptRun:
-            interruptActiveRun()
+            interruptActiveRun(fromGear: .reverse)
         case .reviewPreset, .seventhGear:
             let preset = map.reverse
             currentPreset = preset
             apply(preset, position: .reverse, layer: .custom, source: "REVERSE")
         case .toggleFastMode:
-            toggleFastMode()
+            toggleFastMode(fromGear: .reverse)
         case .settleThread:
-            settleCurrentTask()
+            settleCurrentTask(fromGear: .reverse)
         }
     }
 
@@ -1056,7 +1082,7 @@ final class AppModel: ObservableObject {
         modifierHoldWorkItem = nil
     }
 
-    private func applyFastMode() {
+    private func applyFastMode(fromGear: GearPosition? = nil) {
         let label = fastMode ? "Fast" : "Standard"
         guard !parked else {
             status = "Parked · \(label) staged"
@@ -1082,10 +1108,13 @@ final class AppModel: ObservableObject {
             switch result {
             case .success:
                 self.status = "\(targetTask.title) · \(label)"
+                let hudKind: ShiftHUDKind = fromGear.map { .engaged($0) } ?? .action(badge: self.fastMode ? "⚡ FAST" : "STD")
+                let headline = fromGear.map { "[\($0.label)] Fast Mode \(self.fastMode ? "On" : "Off")" } ?? "Fast Mode \(self.fastMode ? "On" : "Off")"
                 self.emitActionHUD(
-                    kind: .action(badge: self.fastMode ? "⚡ FAST" : "STD"),
-                    headline: "Fast Mode \(self.fastMode ? "On" : "Off")",
-                    detail: targetTask.title
+                    kind: hudKind,
+                    headline: headline,
+                    detail: targetTask.title,
+                    sourceOverride: fromGear == .reverse ? "REVERSE" : nil
                 )
             case let .failure(error):
                 self.status = error.localizedDescription
@@ -1149,17 +1178,28 @@ final class AppModel: ObservableObject {
         onHUDUpdate?(payload)
     }
 
-    private func emitActionHUD(kind: ShiftHUDKind, headline: String, detail: String) {
+    private func emitActionHUD(
+        kind: ShiftHUDKind,
+        headline: String,
+        detail: String,
+        layerOverride: GearLayer? = nil,
+        sourceOverride: String? = nil
+    ) {
         guard bindings.showFloatingHUD else { return }
         let resolved = resolveActiveLayer()
+        let activeLayer = layerOverride ?? resolved.layer
+        let highlighted: GearPosition? = {
+            if case let .engaged(pos) = kind { return pos }
+            return nil
+        }()
         let payload = ShiftHUDPayload(
             kind: kind,
-            layer: resolved.layer,
-            layerSourceLabel: resolved.source,
+            layer: activeLayer,
+            layerSourceLabel: sourceOverride ?? resolved.source,
             headline: headline,
             detail: detail,
             threadTitle: targetTask?.title,
-            slots: hudSlots(for: resolved.layer, highlighted: nil),
+            slots: hudSlots(for: activeLayer, highlighted: highlighted),
             reverseLabel: reverseSlotLabel(),
             isError: false,
             autoHideDelay: bindings.engagedHUDTimeout.duration,
