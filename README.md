@@ -38,7 +38,7 @@ I ordered a NiTHO `GS-SH Gearshifter`, wired it straight into macOS IOKit USB HI
 The HUD stays completely out of your way while you code, then wakes up the instant your hand touches the shifter — non-activating, zero focus stealing, and click-through-friendly with a clickable `×` dismiss button:
 
 <p align="center">
-  <img src="docs/assets/macos-hud-in-action.png" alt="Agent Transmission Floating Shift HUD in action on macOS — Neutral Decision HUD floating over macOS Sonoma Dark with zoomed 44 pt fixed-width H-gate N icon in the macOS menu bar" width="100%" />
+  <img src="docs/assets/macos-hud-in-action.png" alt="Agent Transmission Floating Shift HUD in action on macOS — Neutral Decision HUD floating over macOS Sonoma Dark with live 44 pt fixed-width H-gate N icon in the macOS menu bar" width="100%" />
 </p>
 
 <p align="center">
