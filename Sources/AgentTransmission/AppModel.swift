@@ -501,8 +501,11 @@ final class AppModel: ObservableObject {
                 let summary = catalogByKey["\(preset.provider ?? "")::\(preset.model)"]
                     ?? catalogModels.first(where: { $0.slug == preset.model })
                 let accent = summary?.accentColorHex ?? "#60A5FA"
-                let isCurrent = live?.modelSlug == preset.model
+                let modelMatches = live?.modelSlug == preset.model
                     && (preset.provider == nil || live?.providerInstanceID == preset.provider)
+                let isCurrent = layer == .custom
+                    ? (modelMatches && live?.effort == preset.effort)
+                    : modelMatches
                 let sub = layer == .custom
                     ? preset.effort.shortLabel
                     : (summary?.providerLabel ?? preset.effort.shortLabel)

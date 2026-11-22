@@ -352,26 +352,26 @@ public enum SequentialPaddleAction: String, Codable, CaseIterable, Sendable {
 }
 
 public enum NeutralHUDTimeout: String, Codable, CaseIterable, Sendable {
+    case seconds4
+    case seconds8
+    case seconds15
     case untilInGear
-    case seconds3
-    case seconds5
-    case seconds10
 
     public var displayLabel: String {
         switch self {
+        case .seconds4: "4 seconds"
+        case .seconds8: "8 seconds"
+        case .seconds15: "15 seconds"
         case .untilInGear: "Until back in gear"
-        case .seconds3: "3 seconds"
-        case .seconds5: "5 seconds"
-        case .seconds10: "10 seconds"
         }
     }
 
     public var duration: TimeInterval? {
         switch self {
+        case .seconds4: 4.0
+        case .seconds8: 8.0
+        case .seconds15: 15.0
         case .untilInGear: nil
-        case .seconds3: 3.0
-        case .seconds5: 5.0
-        case .seconds10: 10.0
         }
     }
 }
@@ -424,7 +424,7 @@ public struct TransmissionBindings: Codable, Equatable, Sendable {
         sequentialAction: SequentialPaddleAction = .stepEffort,
         showFloatingHUD: Bool = true,
         showHUDOnNeutral: Bool = true,
-        neutralHUDTimeout: NeutralHUDTimeout = .untilInGear,
+        neutralHUDTimeout: NeutralHUDTimeout = .seconds8,
         engagedHUDTimeout: EngagedHUDTimeout = .normal,
         autoSyncFavorites: Bool = false
     ) {
@@ -455,7 +455,7 @@ public struct TransmissionBindings: Codable, Equatable, Sendable {
         sequentialAction = (try? c.decodeIfPresent(SequentialPaddleAction.self, forKey: .sequentialAction)) ?? .stepEffort
         showFloatingHUD = (try? c.decodeIfPresent(Bool.self, forKey: .showFloatingHUD)) ?? true
         showHUDOnNeutral = (try? c.decodeIfPresent(Bool.self, forKey: .showHUDOnNeutral)) ?? true
-        neutralHUDTimeout = (try? c.decodeIfPresent(NeutralHUDTimeout.self, forKey: .neutralHUDTimeout)) ?? .untilInGear
+        neutralHUDTimeout = (try? c.decodeIfPresent(NeutralHUDTimeout.self, forKey: .neutralHUDTimeout)) ?? .seconds8
         engagedHUDTimeout = (try? c.decodeIfPresent(EngagedHUDTimeout.self, forKey: .engagedHUDTimeout)) ?? .normal
         autoSyncFavorites = (try? c.decodeIfPresent(Bool.self, forKey: .autoSyncFavorites)) ?? false
     }

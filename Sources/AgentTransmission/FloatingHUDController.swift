@@ -62,7 +62,9 @@ final class FloatingHUDController {
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
 
-        let hosting = NSHostingView(rootView: FloatingShiftHUDView(state: state))
+        let hosting = NSHostingView(rootView: FloatingShiftHUDView(state: state, onDismiss: { [weak self] in
+            self?.dismiss()
+        }))
         hosting.wantsLayer = true
         hosting.layer?.backgroundColor = NSColor.clear.cgColor
         panel.contentView = hosting
@@ -73,6 +75,10 @@ final class FloatingHUDController {
     private func present(_ payload: ShiftHUDPayload) {
         let panel = ensurePanel()
         hideWorkItem?.cancel()
+
+        // Allow clicking the dismiss (×) button on the Decision HUD without stealing app focus;
+        // brief engaged/action toasts stay click-through.
+        panel.ignoresMouseEvents = payload.kind != .decision
 
         state.payload = payload
         let targetWidth: CGFloat = payload.slots.isEmpty ? 460 : 696
@@ -171,6 +177,7 @@ final class FloatingHUDController {
 
 private struct FloatingShiftHUDView: View {
     @ObservedObject var state: FloatingHUDState
+    let onDismiss: () -> Void
 
     var body: some View {
         Group {
@@ -264,7 +271,19 @@ private struct FloatingShiftHUDView: View {
                         .foregroundColor(Color.white.opacity(0.6))
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .frame(maxWidth: 230, alignment: .trailing)
+                        .frame(maxWidth: 210, alignment: .trailing)
+                }
+
+                if payload.kind == .decision {
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundColor(Color.white.opacity(0.55))
+                            .frame(width: 20, height: 20)
+                            .background(Circle().fill(Color.white.opacity(0.09)))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Dismiss HUD")
                 }
             }
 
